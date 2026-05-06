@@ -2,6 +2,151 @@
 
 > Executable contracts for the ProductFlow-native product workbench DAG.
 
+## Scenario: Canvas template v1 contract
+
+### 1. Scope / Trigger
+
+- Trigger: any change to canvas template models, built-in ecommerce templates, template catalog endpoints, template
+  application, user-saved node-group templates, or frontend palette DTOs.
+- Canvas templates describe reusable ecommerce production plans. Applying a template must create normal visible
+  workflow nodes and edges that can be edited, connected, and executed through the existing product workflow DAG.
+- Templates may express downstream iteration by adding later nodes such as `image_generation -> reference_image`; they
+  must keep the graph acyclic.
+
+### 2. Signatures
+
+- Backend module: `productflow_backend.application.canvas_templates`.
+- Template models:
+  - `CanvasTemplate`
+  - `CanvasTemplateNodeSpec`
+  - `CanvasTemplateEdgeSpec`
+  - `CanvasTemplateScenarioMetadata`
+  - `CanvasTemplateOutputSlot`
+  - `CanvasTemplateReferenceInputHint`
+  - `CanvasTemplateSuggestedConnection`
+  - `CanvasTemplateScenario`
+  - `TemplateKind = Literal["full_canvas", "node_group"]`
+- Catalog helpers:
+  - `list_builtin_canvas_templates() -> list[CanvasTemplate]`
+  - `get_builtin_canvas_template(template_key: str) -> CanvasTemplate`
+  - `validate_canvas_template(template: CanvasTemplate) -> None`
+- Supported node types for templates are explicitly allowlisted:
+  `product_context`, `reference_image`, `copy_generation`, `image_generation`.
+- Built-in template keys:
+  - `ecommerce-main-image-v1`
+  - `ecommerce-sku-variant-image-v1`
+  - `ecommerce-model-lifestyle-image-v1`
+  - `ecommerce-scene-image-v1`
+  - `ecommerce-detail-material-image-v1`
+  - `ecommerce-campaign-promotion-image-v1`
+  - `ecommerce-white-background-image-v1`
+
+### 3. Contracts
+
+- `CanvasTemplate.version` must be `1`.
+- `CanvasTemplate.kind` must be `full_canvas` for a complete canvas starter plan or `node_group` for a reusable group
+  that can be appended into an existing workflow.
+- `CanvasTemplate.nodes` is required and every node `key` must be unique within the template.
+- Node specs are logical template nodes. Application code that materializes them must translate each node spec into a
+  real `workflow_nodes` row and each edge spec into a real `workflow_edges` row.
+- Node specs may include `config_json` with default instructions, prompt hints, image size, or tool options. Keep these as
+  editable workflow-node config, not separate local UI state.
+- Only `image_generation` node specs may declare `size`.
+- `output_slots` document which `reference_image` nodes receive generated material and how the UI should label those
+  outputs.
+- `reference_inputs` document which `reference_image` nodes are expected to receive user/product/style images before
+  running downstream nodes.
+- `suggested_connections` may describe optional UI connection advice, but every suggestion must point to existing template
+  node keys and must not connect a node to itself.
+- Built-in templates must cover real ecommerce image-production scenarios: main image, SKU/variant, model/lifestyle,
+  scene, detail/material, campaign/promotion, and white-background output.
+- Templates must not introduce new workflow node types by enum drift. When a new `WorkflowNodeType` is added elsewhere,
+  it becomes template-supported only after `SUPPORTED_CANVAS_TEMPLATE_NODE_TYPES` and template tests are updated on
+  purpose.
+
+### 4. Validation & Error Matrix
+
+- Template version is not `1` -> `BusinessValidationError("画布模板版本必须是 v1")`.
+- Unsupported template kind -> `BusinessValidationError("画布模板类型不支持")`.
+- Empty node list -> `BusinessValidationError("画布模板至少需要一个节点")`.
+- Duplicate node key -> `BusinessValidationError("画布模板节点 key 不能重复")`.
+- Unsupported node type -> `BusinessValidationError("画布模板包含不支持的节点类型")`.
+- Non-image node declares `size` -> `BusinessValidationError("只有生图节点可以声明尺寸")`.
+- Edge connects a node to itself -> `BusinessValidationError("画布模板连线不能连接到自身")`.
+- Edge references a missing source or target node -> `BusinessValidationError("画布模板连线引用了不存在的节点")`.
+- Template graph contains a cycle -> `BusinessValidationError` from the workflow DAG topological validator.
+- Output slot references a missing node or a non-`reference_image` node ->
+  `BusinessValidationError("画布模板输出槽必须引用参考图节点")`.
+- Reference input hint references a missing node or a non-`reference_image` node ->
+  `BusinessValidationError("画布模板参考输入必须引用参考图节点")`.
+- Suggested connection connects a node to itself -> `BusinessValidationError("画布模板连接建议不能连接到自身")`.
+- Suggested connection references a missing node -> `BusinessValidationError("画布模板连接建议引用了不存在的节点")`.
+- Unknown built-in template key -> `ValueError("画布模板不存在")`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: main-image template creates product context, copy generation, image generation, generated reference output, and a
+  downstream iteration image/output pair. The iteration path remains a downstream DAG branch.
+- Good: campaign template contains campaign prompt defaults, poster image size, and an explicit generated output slot.
+- Good: node-group template appends a reusable group by materializing normal workflow nodes and remapping template keys to
+  database node IDs before creating edges.
+- Base: a template can include suggested connections for palette guidance without requiring those suggestions to be
+  materialized as edges.
+- Base: a template can include multiple output slots when one generation node is expected to fill multiple downstream
+  `reference_image` nodes.
+- Bad: a template stores a hidden chain in frontend state and creates only one placeholder node in the database.
+- Bad: a template uses a new enum value before the explicit template allowlist and tests are updated.
+
+### 6. Tests Required
+
+- Unit test every built-in template with `validate_canvas_template` and assert all built-ins have unique keys.
+- Unit test required ecommerce scenario coverage: main image, SKU/variant, model/lifestyle, scene, detail/material,
+  campaign/promotion, and white-background.
+- Unit test downstream iteration remains acyclic and includes only downstream template edges.
+- Unit test validation rejects missing edge references, self-edges, cycles, duplicate node keys, unsupported node types,
+  invalid template kind, invalid output slot references, and invalid suggested connections.
+- Unit test direct Pydantic model construction still runs contract validation so bypassing catalog helpers cannot create an
+  invalid template instance.
+- Regression test `SUPPORTED_CANVAS_TEMPLATE_NODE_TYPES` as an explicit allowlist so future `WorkflowNodeType` additions do
+  not silently become template-supported.
+- When a template application API is added, integration tests must assert that applying a template persists real
+  `workflow_nodes` and `workflow_edges`, preserves DAG validation, and keeps prompt/size defaults editable through normal
+  node update endpoints.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+template = {
+    "key": "main-image",
+    "steps": ["copy", "image", "iterate"],
+}
+```
+
+This loses the node and edge contract, so later code cannot materialize the plan as a real workflow DAG.
+
+#### Correct
+
+```python
+CanvasTemplate(
+    key="ecommerce-main-image-v1",
+    version=1,
+    kind="full_canvas",
+    nodes=[
+        CanvasTemplateNodeSpec(key="copy", node_type=WorkflowNodeType.COPY_GENERATION, title="商品卖点文案"),
+        CanvasTemplateNodeSpec(key="image", node_type=WorkflowNodeType.IMAGE_GENERATION, title="生成主图"),
+        CanvasTemplateNodeSpec(key="output", node_type=WorkflowNodeType.REFERENCE_IMAGE, title="主图结果"),
+    ],
+    edges=[
+        CanvasTemplateEdgeSpec(source_node_key="copy", target_node_key="image"),
+        CanvasTemplateEdgeSpec(source_node_key="image", target_node_key="output"),
+    ],
+)
+```
+
+Keep the template as node and edge specs so application code can persist visible, editable, runnable workflow objects.
+
 ## Scenario: Product workflow DAG persistence and execution
 
 ### 1. Scope / Trigger
