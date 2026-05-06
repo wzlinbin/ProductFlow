@@ -141,7 +141,7 @@ class Settings(BaseSettings):
     image_api_key: str | None = None
     image_base_url: str | None = None
     image_generate_model: str = "gpt-5.4"
-    image_responses_background_enabled: bool = False
+    image_responses_background_enabled: bool = True
     image_tool_model: str | None = None
     image_tool_quality: str | None = None
     image_tool_output_format: str | None = None
@@ -331,7 +331,7 @@ CONFIG_DEFINITIONS: tuple[ConfigDefinition, ...] = (
         label="Responses 后台响应模式",
         category="图片生成",
         input_type="boolean",
-        description="默认关闭，兼容 OpenAI-like 网关；开启后会向 /responses 发送顶层 background=true 并轮询响应状态。",
+        description="默认开启，长任务先获取 response_id 并轮询状态；如网关明确不支持会自动回退同步请求。",
     ),
     ConfigDefinition(
         key="image_tool_allowed_fields",
@@ -339,7 +339,10 @@ CONFIG_DEFINITIONS: tuple[ConfigDefinition, ...] = (
         category="图片工具参数",
         input_type="multi_select",
         options=tuple(ConfigOption(key, key) for key in IMAGE_TOOL_FIELD_KEYS),
-        description="控制前端可展示、后端可持久化并发送给 image_generation tool 的高级字段；默认不启用 background。",
+        description=(
+            "控制前端可展示、后端可持久化并发送给 image_generation tool 的高级字段；"
+            "不影响顶层 Responses background。"
+        ),
     ),
     ConfigDefinition(
         key="image_tool_model",

@@ -19,6 +19,15 @@ import type { ConfigItem, ConfigResponse } from "../lib/types";
 
 type DraftValue = string | boolean | string[];
 
+interface DraftSnapshot {
+  value: DraftValue;
+}
+
+interface ConfigDraftState {
+  drafts: Record<string, DraftValue>;
+  snapshots: Record<string, DraftSnapshot>;
+}
+
 function multiSelectValue(value: ConfigItem["value"]): string[] {
   if (Array.isArray(value)) {
     return value.map(String);
@@ -45,12 +54,45 @@ function draftFromItem(item: ConfigItem): DraftValue {
   return item.value === null || item.value === undefined ? "" : String(item.value);
 }
 
-function draftsFromConfig(config: ConfigResponse): Record<string, DraftValue> {
-  const nextDrafts: Record<string, DraftValue> = {};
-  for (const item of config.items) {
-    nextDrafts[item.key] = draftFromItem(item);
+function draftValuesEqual(a: DraftValue, b: DraftValue): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => value === b[index]);
   }
-  return nextDrafts;
+  return a === b;
+}
+
+export function draftsFromConfig(config: ConfigResponse): ConfigDraftState {
+  const nextDrafts: Record<string, DraftValue> = {};
+  const snapshots: Record<string, DraftSnapshot> = {};
+  for (const item of config.items) {
+    const value = draftFromItem(item);
+    nextDrafts[item.key] = value;
+    snapshots[item.key] = {
+      value,
+    };
+  }
+  return { drafts: nextDrafts, snapshots };
+}
+
+export function configValuesFromChangedDrafts(
+  items: ConfigItem[],
+  drafts: Record<string, DraftValue>,
+  snapshots: Record<string, DraftSnapshot>,
+  secretTouched: Record<string, boolean>,
+): Record<string, string | number | boolean | string[] | null> {
+  const values: Record<string, string | number | boolean | string[] | null> = {};
+  for (const item of items) {
+    if (item.secret && !secretTouched[item.key]) {
+      continue;
+    }
+    const snapshot = snapshots[item.key];
+    const nextValue = drafts[item.key] ?? "";
+    if (snapshot && draftValuesEqual(nextValue, snapshot.value)) {
+      continue;
+    }
+    values[item.key] = nextValue;
+  }
+  return values;
 }
 
 function sourceLabel(item: ConfigItem): string {
@@ -234,6 +276,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, DraftValue>>({});
+  const [draftSnapshots, setDraftSnapshots] = useState<Record<string, DraftSnapshot>>({});
   const [secretTouched, setSecretTouched] = useState<Record<string, boolean>>({});
   const [resettingKey, setResettingKey] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -258,7 +301,9 @@ export function SettingsPage() {
     if (!config) {
       return;
     }
-    setDrafts(draftsFromConfig(config));
+    const next = draftsFromConfig(config);
+    setDrafts(next.drafts);
+    setDraftSnapshots(next.snapshots);
     setSecretTouched({});
   }, []);
 
@@ -306,13 +351,7 @@ export function SettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const values: Record<string, string | number | boolean | string[] | null> = {};
-      for (const item of configQuery.data?.items ?? []) {
-        if (item.secret && !secretTouched[item.key]) {
-          continue;
-        }
-        values[item.key] = drafts[item.key] ?? "";
-      }
+      const values = configValuesFromChangedDrafts(configQuery.data?.items ?? [], drafts, draftSnapshots, secretTouched);
       return api.updateConfig({ values });
     },
     onSuccess: (data) => {

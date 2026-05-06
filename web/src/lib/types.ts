@@ -410,6 +410,7 @@ export interface ConfigItem {
   options: ConfigOption[];
   minimum: number | null;
   maximum: number | null;
+  updated_at: string | null;
 }
 
 export interface ConfigResponse {

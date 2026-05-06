@@ -5,11 +5,13 @@ from base64 import b64encode
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
 
 from dramatiq.middleware.time_limit import TimeLimitExceeded
 from sqlalchemy import desc, func, select, update
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm.exc import StaleDataError
 
 from productflow_backend.application.admission import (
     ensure_generation_capacity,
@@ -35,6 +37,7 @@ from productflow_backend.infrastructure.db.models import (
 from productflow_backend.infrastructure.db.session import get_session_factory
 from productflow_backend.infrastructure.image.base import image_dimensions_from_bytes, infer_extension
 from productflow_backend.infrastructure.image.chat_service import ImageChatService, ImageChatTurn
+from productflow_backend.infrastructure.image.responses_provider import PROVIDER_TEXT_OUTPUT_MESSAGE
 from productflow_backend.infrastructure.queue import (
     enqueue_image_session_generation_task,
     enqueue_image_session_generation_task_later,
@@ -87,6 +90,7 @@ class ImageSessionGenerationExecutionError(Exception):
     requested_candidates: int
     generation_group_id: str | None
     timed_out: bool = False
+    safe_reason: str | None = None
 
 
 def _image_session_query():
@@ -568,6 +572,7 @@ def _execute_image_session_round_generation(
                 progress_callback=_provider_progress_callback(
                     session,
                     task_id=generation_task_id,
+                    session_id=image_session_id,
                     candidate_index=candidate_index,
                     generation_count=generation_count,
                     completed_candidates=completed_candidates,
@@ -623,10 +628,12 @@ def _execute_image_session_round_generation(
             )
             session.add(round_item)
             session.flush()
+            now = now_utc()
             if should_update_default_title:
-                image_session.title = _trim_title(prompt)
+                _touch_image_session_if_present(session, image_session.id, now=now, title=_trim_title(prompt))
                 should_update_default_title = False
-            image_session.updated_at = now_utc()
+            else:
+                _touch_image_session_if_present(session, image_session.id, now=now)
             if generation_task_id is not None:
                 task = session.get(ImageSessionGenerationTask, generation_task_id)
                 if task is not None:
@@ -668,6 +675,7 @@ def _execute_image_session_round_generation(
                 requested_candidates=generation_count,
                 generation_group_id=generation_group_id if completed_candidates else None,
                 timed_out=isinstance(exc, TimeLimitExceeded),
+                safe_reason=str(exc) if str(exc) == PROVIDER_TEXT_OUTPUT_MESSAGE else None,
             ) from exc
     session.expire_all()
     return ImageSessionRoundGenerationResult(
@@ -823,16 +831,35 @@ def mark_image_session_generation_task_enqueue_failed(session: Session, *, task_
     task = session.get(ImageSessionGenerationTask, task_id)
     if task is None:
         return
+    now = now_utc()
     task.status = JobStatus.FAILED
     task.failure_reason = reason[:1000]
-    task.finished_at = now_utc()
+    task.finished_at = now
     task.progress_phase = "enqueue_failed"
     task.progress_updated_at = task.finished_at
     task.is_retryable = True
-    image_session = session.get(ImageSession, task.session_id)
-    if image_session is not None:
-        image_session.updated_at = now_utc()
+    _touch_image_session_if_present(session, task.session_id, now=now)
     session.commit()
+
+
+def _touch_image_session_if_present(
+    session: Session,
+    image_session_id: str,
+    *,
+    now: datetime,
+    title: str | None = None,
+) -> None:
+    """Update the parent session timestamp without attaching a possibly stale ImageSession ORM row."""
+
+    values: dict[str, Any] = {"updated_at": now}
+    if title is not None:
+        values["title"] = title
+    session.execute(
+        update(ImageSession)
+        .where(ImageSession.id == image_session_id)
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
 
 
 def _reset_image_generation_task_for_retry(
@@ -856,9 +883,7 @@ def _reset_image_generation_task_for_retry(
     task.is_retryable = True
     if result_generation_group_id is not None:
         task.result_generation_group_id = result_generation_group_id
-    image_session = session.get(ImageSession, task.session_id)
-    if image_session is not None:
-        image_session.updated_at = now
+    _touch_image_session_if_present(session, task.session_id, now=now)
     session.commit()
 
 
@@ -880,9 +905,7 @@ def _finish_image_generation_task(
     task.active_candidate_index = None
     task.progress_updated_at = now
     task.progress_phase = "succeeded" if status == JobStatus.SUCCEEDED else "failed"
-    image_session = session.get(ImageSession, task.session_id)
-    if image_session is not None:
-        image_session.updated_at = now
+    _touch_image_session_if_present(session, task.session_id, now=now)
     session.commit()
 
 
@@ -929,6 +952,7 @@ def _provider_progress_callback(
     session: Session,
     *,
     task_id: str | None,
+    session_id: str,
     candidate_index: int,
     generation_count: int,
     completed_candidates: int,
@@ -952,6 +976,12 @@ def _provider_progress_callback(
             },
         )
 
+    callback.productflow_context = {  # type: ignore[attr-defined]
+        "task_id": task_id,
+        "session_id": session_id,
+        "candidate_index": candidate_index,
+        "candidate_count": generation_count,
+    }
     return callback
 
 
@@ -1058,6 +1088,30 @@ def _handle_image_generation_task_failure(
     )
 
 
+def _handle_image_generation_task_failure_safely(
+    session: Session,
+    *,
+    task_id: str,
+    reason: str,
+    result_generation_group_id: str | None = None,
+) -> None:
+    try:
+        _handle_image_generation_task_failure(
+            session,
+            task_id=task_id,
+            reason=reason,
+            result_generation_group_id=result_generation_group_id,
+        )
+    except StaleDataError:
+        session.rollback()
+        _handle_image_generation_task_failure(
+            session,
+            task_id=task_id,
+            reason=reason,
+            result_generation_group_id=result_generation_group_id,
+        )
+
+
 def execute_image_session_generation_task(task_id: str) -> None:
     """Worker entry: queued -> running -> succeeded/failed; duplicate terminal messages no-op."""
     session_factory = get_session_factory()
@@ -1085,7 +1139,7 @@ def execute_image_session_generation_task(task_id: str) -> None:
             )
         except ImageSessionGenerationExecutionError as exc:
             session.rollback()
-            reason = GENERIC_IMAGE_GENERATION_FAILURE
+            reason = exc.safe_reason or GENERIC_IMAGE_GENERATION_FAILURE
             if exc.completed_candidates > 0:
                 template = PARTIAL_IMAGE_GENERATION_TIMEOUT if exc.timed_out else PARTIAL_IMAGE_GENERATION_FAILURE
                 reason = template.format(
@@ -1094,7 +1148,7 @@ def execute_image_session_generation_task(task_id: str) -> None:
                 )
             task = session.get(ImageSessionGenerationTask, task_id)
             if task is not None:
-                _handle_image_generation_task_failure(
+                _handle_image_generation_task_failure_safely(
                     session,
                     task_id=task.id,
                     reason=reason,
@@ -1105,7 +1159,7 @@ def execute_image_session_generation_task(task_id: str) -> None:
             if isinstance(exc, (KeyboardInterrupt, SystemExit)):
                 raise
             session.rollback()
-            _handle_image_generation_task_failure(
+            _handle_image_generation_task_failure_safely(
                 session,
                 task_id=task_id,
                 reason=GENERIC_IMAGE_GENERATION_FAILURE,

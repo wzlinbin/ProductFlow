@@ -160,6 +160,7 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
     initial_items = {item["key"]: item for item in initial.json()["items"]}
     assert initial_items["image_provider_kind"]["value"] == "mock"
     assert initial_items["image_provider_kind"]["source"] == "env_default"
+    assert initial_items["image_provider_kind"]["updated_at"] is None
     assert initial_items["generation_max_concurrent_tasks"]["value"] == 3
     assert initial_items["image_session_stale_running_after_minutes"]["value"] == 90
     assert initial_items["image_session_stale_running_after_minutes"]["category"] == "生成队列"
@@ -193,8 +194,10 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
     updated_items = {item["key"]: item for item in updated.json()["items"]}
     assert updated_items["image_provider_kind"]["value"] == "openai_responses"
     assert updated_items["image_provider_kind"]["source"] == "database"
+    assert updated_items["image_provider_kind"]["updated_at"] is not None
     assert updated_items["image_api_key"]["value"] == ""
     assert updated_items["image_api_key"]["has_value"] is True
+    assert updated_items["image_api_key"]["updated_at"] is not None
     assert get_runtime_settings().image_provider_kind == "openai_responses"
     assert get_runtime_settings().image_api_key == "database-image-key"
     assert get_runtime_settings().generation_max_concurrent_tasks == 2
@@ -243,7 +246,7 @@ def test_settings_api_accepts_and_validates_optional_image_tool_fields(configure
     assert initial.status_code == 200
     initial_items = {item["key"]: item for item in initial.json()["items"]}
     assert initial_items["image_responses_background_enabled"]["input_type"] == "boolean"
-    assert initial_items["image_responses_background_enabled"]["value"] is False
+    assert initial_items["image_responses_background_enabled"]["value"] is True
     assert initial_items["image_tool_allowed_fields"]["input_type"] == "multi_select"
     assert initial_items["image_tool_allowed_fields"]["value"] == [
         "model",

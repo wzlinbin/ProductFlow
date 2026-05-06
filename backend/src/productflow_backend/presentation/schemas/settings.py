@@ -26,6 +26,7 @@ class ConfigItemResponse(BaseModel):
     options: list[ConfigOptionResponse] = Field(default_factory=list)
     minimum: int | None = None
     maximum: int | None = None
+    updated_at: str | None = None
 
 
 class ConfigResponse(BaseModel):

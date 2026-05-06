@@ -46,9 +46,9 @@ def require_settings_unlocked(request: Request) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先解锁系统配置")
 
 
-def _load_database_values(session: Session) -> dict[str, str]:
+def _load_database_values(session: Session) -> dict[str, AppSetting]:
     rows = session.scalars(select(AppSetting).where(AppSetting.key.in_(RUNTIME_CONFIG_KEYS))).all()
-    return {row.key: row.value for row in rows}
+    return {row.key: row for row in rows}
 
 
 def _public_value(value: Any, *, secret: bool) -> str | int | bool | None:
@@ -79,7 +79,8 @@ def _serialize_config(session: Session) -> ConfigResponse:
             if definition.input_type == "multi_select"
             else _public_value(raw_value, secret=definition.secret)
         )
-        has_value = bool(db_values.get(definition.key) if source == "database" else raw_value)
+        db_value = db_values.get(definition.key)
+        has_value = bool(db_value.value if db_value is not None else raw_value)
         items.append(
             ConfigItemResponse(
                 key=definition.key,
@@ -94,6 +95,7 @@ def _serialize_config(session: Session) -> ConfigResponse:
                 options=[ConfigOptionResponse(value=option.value, label=option.label) for option in definition.options],
                 minimum=definition.minimum,
                 maximum=definition.maximum,
+                updated_at=db_value.updated_at.isoformat() if db_value is not None else None,
             )
         )
     return ConfigResponse(items=items)
@@ -151,7 +153,7 @@ def update_config_endpoint(
     try:
         normalized_values = normalize_config_values(payload.values)
         current_values = _load_database_values(session)
-        next_values = {key: value for key, value in current_values.items() if key not in reset_keys}
+        next_values = {key: row.value for key, row in current_values.items() if key not in reset_keys}
         next_values.update(normalized_values)
         _validate_runtime_settings(next_values)
     except ValueError as exc:

@@ -914,6 +914,17 @@ def _generate_workflow_images_concurrently(
             except WorkflowSafeExecutionError:
                 raise
             except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    (
+                        "工作流图片供应商生成失败: target_index=%s provider=%s model=%s "
+                        "copy_prompt_mode=%s exception_class=%s"
+                    ),
+                    target_index,
+                    getattr(image_provider, "provider_name", None),
+                    getattr(image_provider, "model", None),
+                    render_input.copy_prompt_mode,
+                    type(exc).__name__,
+                )
                 raise WorkflowImageGenerationProviderError(WORKFLOW_IMAGE_GENERATION_FAILURE) from exc
             return _GeneratedWorkflowImage(
                 target_index=target_index,

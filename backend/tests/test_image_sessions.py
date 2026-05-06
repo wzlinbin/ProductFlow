@@ -663,6 +663,44 @@ def test_image_session_worker_auto_retry_caps_and_uses_generic_safe_reason(
     assert calls["count"] == IMAGE_SESSION_GENERATION_MAX_ATTEMPTS
 
 
+def test_image_session_worker_surfaces_completed_text_without_image_reason(
+    configured_env: Path,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.application.image_sessions import (
+        create_image_session,
+        create_image_session_generation_task,
+        execute_image_session_generation_task,
+    )
+    from productflow_backend.infrastructure.image.responses_provider import PROVIDER_TEXT_OUTPUT_MESSAGE
+
+    def fail_with_text_output(*args, **kwargs) -> None:
+        raise RuntimeError(PROVIDER_TEXT_OUTPUT_MESSAGE)
+
+    monkeypatch.setattr(
+        "productflow_backend.infrastructure.image.chat_service.ImageChatService.generate",
+        fail_with_text_output,
+    )
+
+    image_session = create_image_session(db_session, product_id=None, title="provider text only")
+    result = create_image_session_generation_task(
+        db_session,
+        image_session_id=image_session.id,
+        prompt="供应商完成但只返回文字",
+        size="1024x1024",
+    )
+
+    execute_image_session_generation_task(result.task.id)
+
+    db_session.expire_all()
+    task = db_session.get(ImageSessionGenerationTask, result.task.id)
+    assert task is not None
+    assert task.status == "failed"
+    assert task.failure_reason == PROVIDER_TEXT_OUTPUT_MESSAGE
+    assert task.is_retryable is True
+
+
 def test_image_session_worker_partial_retry_continues_remaining_candidates_without_duplicates(
     configured_env: Path,
     db_session,
@@ -775,6 +813,108 @@ def test_image_session_worker_marks_task_failed_when_time_limit_raises_outside_c
     assert task.finished_at is not None
     assert task.attempts == 3
     assert task.is_retryable is True
+
+
+def test_image_session_worker_failure_settles_task_when_parent_session_deleted(
+    configured_env: Path,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import delete
+
+    from productflow_backend.application.image_sessions import (
+        create_image_session,
+        create_image_session_generation_task,
+        execute_image_session_generation_task,
+    )
+
+    monkeypatch.setattr(
+        "productflow_backend.infrastructure.image.chat_service.ImageChatService.generate",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("provider failed")),
+    )
+
+    image_session = create_image_session(db_session, product_id=None, title="父会话已删除")
+    result = create_image_session_generation_task(
+        db_session,
+        image_session_id=image_session.id,
+        prompt="provider 失败时父会话可能已经不在",
+        size="1024x1024",
+    )
+
+    db_session.execute(delete(ImageSession).where(ImageSession.id == image_session.id))
+    db_session.commit()
+
+    execute_image_session_generation_task(result.task.id)
+
+    db_session.expire_all()
+    task = db_session.get(ImageSessionGenerationTask, result.task.id)
+    assert task is not None
+    assert task.status == "failed"
+    assert task.failure_reason == "图片生成失败，请稍后重试"
+    assert task.finished_at is not None
+    assert task.attempts == 3
+    assert task.is_retryable is True
+
+
+def test_image_session_worker_failure_settlement_retries_after_stale_data_error(
+    configured_env: Path,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy.orm.exc import StaleDataError
+
+    from productflow_backend.application import image_sessions as image_session_app
+    from productflow_backend.application.image_sessions import (
+        ImageSessionGenerationExecutionError,
+        create_image_session,
+        create_image_session_generation_task,
+        execute_image_session_generation_task,
+    )
+
+    monkeypatch.setattr(
+        image_session_app,
+        "_execute_image_session_round_generation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ImageSessionGenerationExecutionError(
+                completed_candidates=1,
+                requested_candidates=2,
+                generation_group_id="generation-group-stale",
+                timed_out=False,
+            )
+        ),
+    )
+    original_handle_failure = image_session_app._handle_image_generation_task_failure
+    settlement_calls = {"count": 0}
+
+    def flaky_handle_failure(*args, **kwargs):
+        settlement_calls["count"] += 1
+        if settlement_calls["count"] == 1:
+            raise StaleDataError("stale parent session")
+        return original_handle_failure(*args, **kwargs)
+
+    monkeypatch.setattr(image_session_app, "_handle_image_generation_task_failure", flaky_handle_failure)
+
+    image_session = create_image_session(db_session, product_id=None, title="stale 收口")
+    result = create_image_session_generation_task(
+        db_session,
+        image_session_id=image_session.id,
+        prompt="失败收口期间 ORM stale",
+        size="1024x1024",
+        generation_count=2,
+    )
+
+    execute_image_session_generation_task(result.task.id)
+
+    db_session.expire_all()
+    task = db_session.get(ImageSessionGenerationTask, result.task.id)
+    assert task is not None
+    assert task.status == "failed"
+    assert task.failure_reason == "已生成 1/2 张候选，后续生成失败，请重新发起生成补齐。"
+    assert task.result_generation_group_id is not None
+    assert task.finished_at is not None
+    assert task.attempts == 3
+    assert task.is_retryable is True
+    assert settlement_calls["count"] == 4
 
 
 def test_image_session_worker_persists_provider_progress_heartbeat(

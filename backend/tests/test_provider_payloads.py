@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -44,6 +45,27 @@ def _execute_workflow_queue_inline_fixture(monkeypatch: pytest.MonkeyPatch) -> N
     """Keep API workflow tests deterministic while production delivery goes through Dramatiq."""
 
     _execute_workflow_queue_inline(monkeypatch)
+
+
+def _progress_collector_with_context(
+    *,
+    task_id: str,
+    session_id: str,
+    candidate_index: int,
+    candidate_count: int,
+):
+    events: list[dict] = []
+
+    def append(progress: dict) -> None:
+        events.append(progress)
+
+    append.productflow_context = {  # type: ignore[attr-defined]
+        "task_id": task_id,
+        "session_id": session_id,
+        "candidate_index": candidate_index,
+        "candidate_count": candidate_count,
+    }
+    return append
 
 
 def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, monkeypatch) -> None:
@@ -548,6 +570,7 @@ def test_openai_responses_poster_provider_uses_image_generation_tool(
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
+    monkeypatch.setenv("IMAGE_RESPONSES_BACKGROUND_ENABLED", "false")
     get_settings.cache_clear()
 
     calls: list[dict] = []
@@ -642,6 +665,7 @@ def test_openai_responses_image_tool_optional_fields_are_omitted_until_configure
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
+    monkeypatch.setenv("IMAGE_RESPONSES_BACKGROUND_ENABLED", "false")
     get_settings.cache_clear()
 
     calls: list[dict] = []
@@ -795,8 +819,10 @@ def test_openai_responses_image_client_polls_background_response_and_reports_pro
     assert calls[0]["background"] is True
     assert retrieved == ["resp_background"]
     assert result.provider_response_id == "resp_background"
+    assert result.provider_output_json["status"] == "completed"
     assert result.image_generation_call_id == "ig_background"
     assert [event["provider_response_status"] for event in progress_events] == ["queued", "completed"]
+    assert [event["provider_response_id"] for event in progress_events] == ["resp_background", "resp_background"]
     assert progress_events[-1]["provider_response"]["output"][0]["result"].startswith("<base64 omitted")
 
 
@@ -882,13 +908,87 @@ def test_openai_responses_image_client_wraps_background_poll_errors(
     monkeypatch.setattr("productflow_backend.infrastructure.image.responses_provider.OpenAI", DummyOpenAI)
     monkeypatch.setattr("productflow_backend.infrastructure.image.responses_provider.sleep", lambda seconds: None)
 
+    from productflow_backend.infrastructure.image import responses_provider
     from productflow_backend.infrastructure.image.responses_provider import OpenAIResponsesImageClient
 
+    log_messages: list[str] = []
+
+    class DummyLogger:
+        def log(self, level: int, message: str, *args) -> None:
+            log_messages.append(message % args)
+
+        def warning(self, message: str, *args) -> None:
+            log_messages.append(message % args)
+
+    monkeypatch.setattr(responses_provider, "logger", DummyLogger())
+
     with pytest.raises(RuntimeError) as exc_info:
-        OpenAIResponsesImageClient().generate_image(prompt="轮询失败", size="1024x1024")
+        OpenAIResponsesImageClient().generate_image(
+            prompt="轮询失败",
+            size="1024x1024",
+            progress_callback=_progress_collector_with_context(
+                task_id="task-1",
+                session_id="session-1",
+                candidate_index=2,
+                candidate_count=4,
+            ),
+        )
 
     assert str(exc_info.value) == "图片供应商请求失败，请检查供应商配置后重试"
     assert "secret material" not in str(exc_info.value)
+    log_text = "\n".join(log_messages)
+    assert "task_id=task-1" in log_text
+    assert "session_id=session-1" in log_text
+    assert "candidate_index=2" in log_text
+    assert "candidate_count=4" in log_text
+    assert "model=gpt-5.4" in log_text
+    assert "background=True" in log_text
+    assert "status=queued" in log_text
+    assert "response_id=resp_poll_error" in log_text
+    assert "exception_class=RuntimeError" in log_text
+    assert "secret material" not in log_text
+    assert "demo-api-key" not in log_text
+
+
+def test_openai_responses_image_client_redacts_base_url_credentials_in_logs(
+    configured_env: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
+    monkeypatch.setenv("IMAGE_BASE_URL", "https://user:secret-pass@example.test/v1?token=secret-token")
+    monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
+    get_settings.cache_clear()
+
+    class DummyResponses:
+        def create(self, **kwargs):
+            raise RuntimeError("provider failure")
+
+    class DummyOpenAI:
+        def __init__(self, **kwargs) -> None:
+            self.responses = DummyResponses()
+
+    monkeypatch.setattr("productflow_backend.infrastructure.image.responses_provider.OpenAI", DummyOpenAI)
+
+    from productflow_backend.infrastructure.image import responses_provider
+    from productflow_backend.infrastructure.image.responses_provider import OpenAIResponsesImageClient
+
+    log_messages: list[str] = []
+
+    class DummyLogger:
+        def log(self, level: int, message: str, *args) -> None:
+            if level >= logging.WARNING:
+                log_messages.append(message % args)
+
+    monkeypatch.setattr(responses_provider, "logger", DummyLogger())
+
+    with pytest.raises(RuntimeError):
+        OpenAIResponsesImageClient().generate_image(prompt="日志脱敏", size="1024x1024")
+
+    log_text = "\n".join(log_messages)
+    assert "base_url=https://example.test/v1" in log_text
+    assert "secret-pass" not in log_text
+    assert "secret-token" not in log_text
+    assert "demo-api-key" not in log_text
 
 
 def test_openai_responses_image_client_retries_without_optional_fields_and_records_note(
@@ -1146,3 +1246,43 @@ def test_default_image_prompts_are_low_pollution_context_carriers(configured_env
     assert "画一张蓝色抽象渐变" in prompt
     assert "无显式上游上下文" in prompt
     assert "1280x720" in chat_prompt
+
+
+def test_openai_responses_image_client_reports_completed_text_without_image(
+    configured_env: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
+    monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
+    get_settings.cache_clear()
+
+    class DummyResponse:
+        id = "resp_text_only"
+        status = "completed"
+        output = [
+            {
+                "type": "message",
+                "content": [{"type": "output_text", "text": "抱歉，无法生成这张图片。"}],
+            }
+        ]
+
+        def model_dump(self, *, mode: str, exclude_none: bool) -> dict:
+            return {"id": self.id, "status": self.status, "output": self.output}
+
+    class DummyResponses:
+        def create(self, **kwargs):
+            return DummyResponse()
+
+    class DummyOpenAI:
+        def __init__(self, **kwargs) -> None:
+            self.responses = DummyResponses()
+
+    monkeypatch.setattr("productflow_backend.infrastructure.image.responses_provider.OpenAI", DummyOpenAI)
+
+    from productflow_backend.infrastructure.image.responses_provider import OpenAIResponsesImageClient
+
+    with pytest.raises(RuntimeError) as error:
+        OpenAIResponsesImageClient().generate_image(prompt="只返回文字", size="1024x1024")
+
+    assert str(error.value) == "图片供应商已完成请求，但返回的是文字回复，没有返回图片结果"

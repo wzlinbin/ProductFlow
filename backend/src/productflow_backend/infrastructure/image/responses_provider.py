@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from base64 import b64encode
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from time import sleep
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
 
@@ -31,6 +33,12 @@ IMAGE_TOOL_OPTIONAL_FIELD_KEYS = IMAGE_TOOL_FIELD_KEYS
 RESPONSES_BACKGROUND_POLL_INTERVAL_SECONDS = 2.0
 RESPONSES_IN_PROGRESS_STATUSES = {"queued", "in_progress"}
 RESPONSES_TERMINAL_FAILURE_STATUSES = {"failed", "cancelled", "canceled", "incomplete", "expired"}
+PROVIDER_REQUEST_FAILURE_MESSAGE = "图片供应商请求失败，请检查供应商配置后重试"
+PROVIDER_BACKGROUND_INCOMPLETE_MESSAGE = "图片供应商后台生成未完成，请稍后重试"
+PROVIDER_MISSING_OUTPUT_MESSAGE = "图片供应商没有返回图片结果，请稍后重试"
+PROVIDER_TEXT_OUTPUT_MESSAGE = "图片供应商已完成请求，但返回的是文字回复，没有返回图片结果"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -180,6 +188,7 @@ class OpenAIResponsesImageClient:
         reference_images = reference_images or []
         tool = self._build_image_generation_tool(size, tool_options=tool_options)
         input_payload = self._build_input(prompt=prompt, reference_images=reference_images)
+        task_context = self._progress_task_context(progress_callback)
         request_payload: dict[str, Any] = {
             "model": self.model,
             "input": input_payload,
@@ -198,22 +207,64 @@ class OpenAIResponsesImageClient:
         try:
             client = OpenAI(**client_kwargs)
         except Exception as exc:  # noqa: BLE001
-            raise RuntimeError("图片供应商请求失败，请检查供应商配置后重试") from exc
+            self._log_provider_exception(
+                "初始化 Responses 图片供应商失败",
+                exc=exc,
+                phase="client_init",
+                request_payload=request_payload,
+                task_context=task_context,
+            )
+            raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
 
-        response, request_payload, fallback_used = self._create_response_with_fallback(
-            client=client,
-            request_payload=request_payload,
-            requested_tool=tool,
-            size=size,
-        )
-        response = self._poll_background_response(client, response, progress_callback=progress_callback)
+        try:
+            response, request_payload, fallback_used = self._create_response_with_fallback(
+                client=client,
+                request_payload=request_payload,
+                requested_tool=tool,
+                size=size,
+                task_context=task_context,
+            )
+            response = self._poll_background_response(
+                client,
+                response,
+                request_payload=request_payload,
+                progress_callback=progress_callback,
+                task_context=task_context,
+            )
 
-        output_call = self._extract_image_generation_call(response)
-        image_b64 = _get_value(output_call, "result")
-        if not image_b64:
-            raise RuntimeError("图片供应商没有返回 image_generation_call.result")
+            output_call = self._extract_image_generation_call(response)
+            image_b64 = _get_value(output_call, "result")
+            if not image_b64:
+                raise RuntimeError(PROVIDER_MISSING_OUTPUT_MESSAGE)
 
-        image_bytes = decode_b64_image(image_b64)
+            image_bytes = decode_b64_image(image_b64)
+        except RuntimeError as exc:
+            if str(exc) in {
+                PROVIDER_REQUEST_FAILURE_MESSAGE,
+                PROVIDER_BACKGROUND_INCOMPLETE_MESSAGE,
+                PROVIDER_MISSING_OUTPUT_MESSAGE,
+                PROVIDER_TEXT_OUTPUT_MESSAGE,
+            }:
+                raise
+            self._log_provider_exception(
+                "解析 Responses 图片供应商结果失败",
+                exc=exc,
+                phase="parse_response",
+                request_payload=request_payload,
+                response=response if "response" in locals() else None,
+                task_context=task_context,
+            )
+            raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
+        except Exception as exc:  # noqa: BLE001
+            self._log_provider_exception(
+                "解析 Responses 图片供应商结果失败",
+                exc=exc,
+                phase="parse_response",
+                request_payload=request_payload,
+                response=response if "response" in locals() else None,
+                task_context=task_context,
+            )
+            raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
         response_json = _jsonable(response)
         request_json = _sanitize_base64_images(request_payload)
         output_json = _sanitize_base64_images(response_json)
@@ -253,6 +304,7 @@ class OpenAIResponsesImageClient:
         request_payload: dict[str, Any],
         requested_tool: dict[str, Any],
         size: str,
+        task_context: dict[str, Any],
     ) -> tuple[Any, dict[str, Any], bool]:
         fallback_used = False
         current_payload = request_payload
@@ -261,15 +313,38 @@ class OpenAIResponsesImageClient:
                 return client.responses.create(**current_payload), current_payload, fallback_used
             except Exception as exc:  # noqa: BLE001
                 if current_payload.get("background") is True and self._is_background_unsupported_error(exc):
+                    self._log_provider_exception(
+                        "Responses 图片供应商不支持 background，回退同步请求",
+                        exc=exc,
+                        phase="create_background_fallback",
+                        request_payload=current_payload,
+                        task_context=task_context,
+                        level=logging.INFO,
+                    )
                     current_payload = dict(current_payload)
                     current_payload.pop("background", None)
                     continue
                 if self._has_optional_tool_fields(current_payload["tools"][0]):
+                    self._log_provider_exception(
+                        "Responses 图片供应商拒绝高级 tool 字段，回退基础 tool",
+                        exc=exc,
+                        phase="create_tool_fallback",
+                        request_payload=current_payload,
+                        task_context=task_context,
+                        level=logging.INFO,
+                    )
                     current_payload = dict(current_payload)
                     current_payload["tools"] = [self._build_image_generation_tool(size, include_optional=False)]
                     fallback_used = current_payload["tools"][0] != requested_tool
                     continue
-                raise RuntimeError("图片供应商请求失败，请检查供应商配置后重试") from exc
+                self._log_provider_exception(
+                    "Responses 图片供应商创建请求失败",
+                    exc=exc,
+                    phase="create",
+                    request_payload=current_payload,
+                    task_context=task_context,
+                )
+                raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
 
     def _is_background_unsupported_error(self, exc: Exception) -> bool:
         message = str(exc).lower()
@@ -291,7 +366,9 @@ class OpenAIResponsesImageClient:
         client: Any,
         response: Any,
         *,
+        request_payload: dict[str, Any],
         progress_callback: Callable[[dict[str, Any]], None] | None,
+        task_context: dict[str, Any],
     ) -> Any:
         self._emit_response_progress(response, progress_callback)
         response_id = str(_get_value(response, "id", "") or "")
@@ -301,11 +378,26 @@ class OpenAIResponsesImageClient:
             try:
                 response = client.responses.retrieve(response_id)
             except Exception as exc:  # noqa: BLE001
-                raise RuntimeError("图片供应商请求失败，请检查供应商配置后重试") from exc
+                self._log_provider_exception(
+                    "Responses 图片供应商轮询失败",
+                    exc=exc,
+                    phase="retrieve",
+                    request_payload=request_payload,
+                    response=response,
+                    task_context=task_context,
+                )
+                raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
             self._emit_response_progress(response, progress_callback)
             status = str(_get_value(response, "status", "") or "").lower()
         if status in RESPONSES_TERMINAL_FAILURE_STATUSES:
-            raise RuntimeError("图片供应商后台生成未完成，请稍后重试")
+            self._log_provider_failure(
+                "Responses 图片供应商后台生成失败",
+                phase="terminal_status",
+                request_payload=request_payload,
+                response=response,
+                task_context=task_context,
+            )
+            raise RuntimeError(PROVIDER_BACKGROUND_INCOMPLETE_MESSAGE)
         return response
 
     def _emit_response_progress(
@@ -322,6 +414,122 @@ class OpenAIResponsesImageClient:
                 "provider_response_status": str(_get_value(response, "status", "") or "") or None,
                 "provider_response": response_json,
             }
+        )
+
+    def _progress_task_context(
+        self,
+        progress_callback: Callable[[dict[str, Any]], None] | None,
+    ) -> dict[str, Any]:
+        if progress_callback is None:
+            return {}
+        context = getattr(progress_callback, "productflow_context", None)
+        return dict(context) if isinstance(context, dict) else {}
+
+    def _request_diagnostic_fields(self, request_payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "model": request_payload.get("model") or self.model,
+            "base_url": self._safe_base_url(),
+            "background": request_payload.get("background", False),
+            "tool_fields": sorted(
+                key
+                for tool in request_payload.get("tools", [])
+                if isinstance(tool, dict)
+                for key in tool
+                if key != "type"
+            ),
+        }
+
+    def _safe_base_url(self) -> str | None:
+        if not self.base_url:
+            return None
+        split = urlsplit(self.base_url)
+        if split.username or split.password:
+            hostname = split.hostname or ""
+            netloc = hostname
+            if split.port is not None:
+                netloc = f"{netloc}:{split.port}"
+            return urlunsplit((split.scheme, netloc, split.path, "", ""))
+        return urlunsplit((split.scheme, split.netloc, split.path, "", ""))
+
+    def _response_diagnostic_fields(self, response: Any | None) -> dict[str, Any]:
+        if response is None:
+            return {"provider_response_id": None, "provider_response_status": None}
+        return {
+            "provider_response_id": str(_get_value(response, "id", "") or "") or None,
+            "provider_response_status": str(_get_value(response, "status", "") or "") or None,
+        }
+
+    def _log_provider_exception(
+        self,
+        message: str,
+        *,
+        exc: Exception,
+        phase: str,
+        request_payload: dict[str, Any],
+        task_context: dict[str, Any],
+        response: Any | None = None,
+        level: int = logging.WARNING,
+    ) -> None:
+        fields = {
+            **task_context,
+            **self._request_diagnostic_fields(request_payload),
+            **self._response_diagnostic_fields(response),
+            "phase": phase,
+            "exception_class": type(exc).__name__,
+        }
+        logger.log(
+            level,
+            (
+                "%s: phase=%s task_id=%s session_id=%s candidate_index=%s candidate_count=%s "
+                "model=%s base_url=%s background=%s status=%s response_id=%s exception_class=%s tool_fields=%s"
+            ),
+            message,
+            fields["phase"],
+            fields.get("task_id"),
+            fields.get("session_id"),
+            fields.get("candidate_index"),
+            fields.get("candidate_count"),
+            fields["model"],
+            fields["base_url"],
+            fields["background"],
+            fields["provider_response_status"],
+            fields["provider_response_id"],
+            fields["exception_class"],
+            fields["tool_fields"],
+        )
+
+    def _log_provider_failure(
+        self,
+        message: str,
+        *,
+        phase: str,
+        request_payload: dict[str, Any],
+        task_context: dict[str, Any],
+        response: Any | None = None,
+    ) -> None:
+        fields = {
+            **task_context,
+            **self._request_diagnostic_fields(request_payload),
+            **self._response_diagnostic_fields(response),
+            "phase": phase,
+        }
+        logger.warning(
+            (
+                "%s: phase=%s task_id=%s session_id=%s candidate_index=%s candidate_count=%s "
+                "model=%s base_url=%s background=%s status=%s response_id=%s tool_fields=%s"
+            ),
+            message,
+            fields["phase"],
+            fields.get("task_id"),
+            fields.get("session_id"),
+            fields.get("candidate_index"),
+            fields.get("candidate_count"),
+            fields["model"],
+            fields["base_url"],
+            fields["background"],
+            fields["provider_response_status"],
+            fields["provider_response_id"],
+            fields["tool_fields"],
         )
 
     def _build_image_generation_tool(
@@ -441,7 +649,19 @@ class OpenAIResponsesImageClient:
         for output in output_items:
             if _get_value(output, "type") == "image_generation_call":
                 return output
-        raise RuntimeError("图片供应商没有返回 image_generation_call")
+        if self._has_text_output(output_items):
+            raise RuntimeError(PROVIDER_TEXT_OUTPUT_MESSAGE)
+        raise RuntimeError(PROVIDER_MISSING_OUTPUT_MESSAGE)
+
+    def _has_text_output(self, output_items: list[Any]) -> bool:
+        for output in output_items:
+            if _get_value(output, "type") == "message":
+                content_items = _get_value(output, "content", []) or []
+                for content in content_items:
+                    text = str(_get_value(content, "text", "") or "").strip()
+                    if _get_value(content, "type") == "output_text" and text:
+                        return True
+        return False
 
 
 class OpenAIResponsesImageProvider(ImageProvider):

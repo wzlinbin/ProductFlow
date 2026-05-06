@@ -283,6 +283,10 @@ return a generic queue/provider failure detail instead.
   - current `provider_response_id` / `provider_response_status` when available.
 - OpenAI Responses image generation should use background response creation and `responses.retrieve(...)` polling when the
   provider supports it. Each provider status response should refresh task progress while generation is still working.
+- Failure/retry settlement must update `ImageSessionGenerationTask` independently from the parent `ImageSession`. Parent
+  `updated_at`/title touches should use tolerant SQL `UPDATE image_sessions ... WHERE id = ...`-style updates instead of
+  requiring a live parent ORM instance, because the session row may have been deleted or a previously loaded ORM row may
+  be stale while a worker is settling provider failure.
 - Worker-owned failed/timeout tasks use application-level retry instead of Dramatiq actor retries:
   - `workers.run_image_session_generation_task` must keep `max_retries=0`.
   - each worker claim increments `ImageSessionGenerationTask.attempts`.
@@ -313,6 +317,8 @@ return a generic queue/provider failure detail instead.
   candidate 2 without calling the provider for candidate 1 again.
 - Duplicate worker message for a terminal task -> no-op; do not call the provider again.
 - Duplicate worker message for an already running non-stale task -> no-op; recovery handles stale running tasks separately.
+- Provider failure after the parent `ImageSession` has disappeared or become stale -> worker still marks the durable
+  task failed/retryable when the task row exists; no unhandled `StaleDataError` should escape the actor.
 
 #### 5. Good/Base/Bad Cases
 
@@ -329,6 +335,8 @@ return a generic queue/provider failure detail instead.
   creates confusing duplicate candidates.
 - Bad: enabling generic Dramatiq actor retries; this bypasses the database retry cap and can duplicate work outside the
   application-level state machine.
+- Bad: touching `task.session.updated_at` or a loaded `ImageSession` ORM object during failure settlement; stale/deleted
+  parents can make task failure persistence itself fail.
 
 #### 6. Tests Required
 
@@ -338,6 +346,7 @@ return a generic queue/provider failure detail instead.
   safe reason, and leaves `is_retryable=true`.
 - Worker test: timeout outside the per-candidate loop still marks the task `failed` with the generic safe reason.
 - Worker progress test: provider polling callbacks update durable progress fields while the task remains running.
+- Worker test: provider failure still settles the task when the parent `ImageSession` row is missing/stale.
 - Worker capacity test: if another workflow/image task already fills the global running cap, executing a queued
   `ImageSessionGenerationTask` leaves it queued, does not increment attempts, does not call the provider, and schedules a
   delayed requeue.

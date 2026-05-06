@@ -639,8 +639,10 @@ failures into safe persisted failure reasons instead of leaking provider details
 
 - Top-level `model` remains `image_generate_model`; `image_tool_model` is only the optional tool-level `model`.
 - Defaults must remain AnyRouter-compatible: the tool object is effectively `{"type":"image_generation","size": size}`.
-- Top-level Responses `background=true` is controlled by `image_responses_background_enabled` and must default to disabled
-  for OpenAI-compatible gateways that reject the parameter.
+- Top-level Responses `background=true` is controlled by `image_responses_background_enabled` and defaults to enabled so
+  long-running image tasks can persist a `response_id` quickly and continue through `responses.retrieve(...)` polling.
+  Gateways that explicitly reject top-level `background` must trigger one automatic retry without the field; operators
+  may still disable the setting when they know a gateway is incompatible and want to avoid the fallback round trip.
 - Do not add default `tool_choice` for image generation.
 - Optional tool fields are sent only when non-empty/non-null after runtime settings normalization and when included in
   `image_tool_allowed_fields`.
@@ -672,7 +674,8 @@ failures into safe persisted failure reasons instead of leaking provider details
 - `image_tool_n < 1` or `> 10` -> `/api/settings` returns `400`.
 - `image_tool_allowed_fields` contains an unknown field -> `/api/settings` returns `400`.
 - `image_responses_background_enabled == False` -> provider payload omits top-level `background`.
-- `image_responses_background_enabled == True` and provider rejects top-level `background` -> retry without it once.
+- `image_responses_background_enabled == True` and provider rejects top-level `background` -> retry without it once and
+  keep the user-facing failure/detail generic if both attempts fail.
 - Per-request or workflow `tool_options` contains fields not listed in `image_tool_allowed_fields` -> field is filtered
   before persistence and provider calls.
 - Per-request `tool_options.output_compression < 0` or `> 100` -> `/api/image-sessions/{id}/generate` returns `422`.
@@ -696,7 +699,8 @@ failures into safe persisted failure reasons instead of leaking provider details
   generation still follows runtime defaults.
 - Good: provider rejects optional fields, fallback with `{"type":"image_generation","size": size}` succeeds, and the
   completed round/task shows only `供应商不支持部分参数，已按基础参数完成。`.
-- Base: all optional fields unset; request payload is unchanged from the historical AnyRouter-compatible shape.
+- Base: all optional fields unset; request payload still uses only the basic `image_generation` tool object, while the
+  top-level request includes `background=true` unless the runtime setting disables it or fallback removes it.
 - Base: provider returns JPEG bytes even while output metadata is normalized to PNG; stored/generated MIME type is
   `image/jpeg` because byte detection wins.
 - Base: provider accepts the request but reports `output_format=png` after `webp` was requested; the result remains
