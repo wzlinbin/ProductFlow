@@ -227,8 +227,12 @@ creating another durable run. The global cap protects provider/worker execution,
 must remain able to create queued work and re-enqueue stranded active workflow runs while all running slots are occupied.
 
 When a worker sees the running cap is reached, leave the durable task queued, do not call the provider, and schedule a
-delayed delivery retry. Do not leak queue, Redis, provider, or filesystem exception strings to users; persist or return a
-generic queue/provider failure detail instead.
+delayed delivery retry. Do not leak queue, Redis, provider, or filesystem exception strings to users. Provider messages may
+be persisted only after sanitization and categorization. Common provider/network failures should map to concise
+user-facing categories: rate limit/quota, content-policy refusal, connection interruption, request timeout, unsupported
+parameters, and provider 5xx/service failure. Safe, actionable uncategorized details such as unsupported dimensions can be
+shown with a `图片生成失败：...` prefix, while messages containing API keys, tokens, base URLs, prompts, request bodies,
+file paths, or tracebacks must fall back to the generic queue/provider failure detail.
 
 ### Scenario: Continuous image-session worker partial-success and timeout handling
 
@@ -298,7 +302,8 @@ generic queue/provider failure detail instead.
   - while `attempts` is below the application cap, failure resets the same task to `queued` and re-enqueues it.
   - after the cap is reached, the task becomes `failed`, sets `finished_at`, and remains `is_retryable=true` so the
     owning image session can expose a manual retry action.
-  - a generic or partial-success `failure_reason` is stored only on the terminal failed state.
+  - a sanitized safe detail, generic detail, or partial-success `failure_reason` is stored only on the terminal failed
+    state.
   - `completed_candidates` and `result_generation_group_id` must be preserved when at least one candidate was already
     persisted.
 - `KeyboardInterrupt` and `SystemExit` must still propagate. Other `BaseException` subclasses raised by Dramatiq time
@@ -314,8 +319,8 @@ generic queue/provider failure detail instead.
 - Stale running task with fresh `progress_updated_at` but old `started_at` -> remains `running`; recovery must not reset it.
 - Stale running task with already completed candidates -> recovery marks `failed` with the partial-timeout reason and does
   not auto-requeue, because the worker's in-flight provider state is unknown.
-- Timeout or safe worker exception before any candidate is committed -> task `failed`, no rounds/assets, generic
-  `"图片生成失败，请稍后重试"` only after the automatic retry cap is reached.
+- Timeout or safe worker exception before any candidate is committed -> task `failed`, no rounds/assets, sanitized safe
+  detail or generic `"图片生成失败，请稍后重试"` only after the automatic retry cap is reached.
 - Queued task consumed while global running capacity is full -> task remains `queued`, `attempts` stays unchanged,
   provider is not called, progress phase becomes a waiting-for-capacity state, and the task is re-enqueued with delay.
 - Partial failure after candidate 1 of 2 -> automatic retry preserves the existing generation group and resumes at
@@ -347,8 +352,11 @@ generic queue/provider failure detail instead.
 
 - Worker test: partial success followed by `TimeLimitExceeded` keeps the committed round/asset, auto-retries the same task,
   resumes at the remaining candidate, and does not duplicate the saved candidate.
-- Worker test: repeated provider failure stops at the application retry cap, marks the task `failed`, exposes the generic
-  safe reason, and leaves `is_retryable=true`.
+- Worker test: repeated provider failure stops at the application retry cap, marks the task `failed`, exposes either the
+  sanitized safe detail or generic safe reason as appropriate, and leaves `is_retryable=true`.
+- Worker test: wrapped provider exceptions still inspect the exception chain so rate limits, content-policy refusals,
+  connection interruptions, provider 5xx errors, and unsupported-parameter failures do not collapse into the outer generic
+  request-failure text.
 - Worker test: timeout outside the per-candidate loop still marks the task `failed` with the generic safe reason.
 - Worker progress test: provider polling callbacks update durable progress fields while the task remains running.
 - Worker test: provider failure still settles the task when the parent `ImageSession` row is missing/stale.

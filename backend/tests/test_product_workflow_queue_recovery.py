@@ -64,6 +64,24 @@ class _FailingWorkflowImageProvider:
         raise RuntimeError("raw provider failure sk-test base_url=https://secret-provider.example prompt=full-prompt")
 
 
+class _SafeFailingWorkflowImageProvider:
+    provider_name = "safe-failing-test"
+    prompt_version = "safe-failing-test-v1"
+
+    def generate_poster_image(self, *args, **kwargs):
+        raise RuntimeError("image2 不支持 64x64，最小尺寸为 512x512")
+
+
+class _RateLimitedWorkflowImageProvider:
+    provider_name = "rate-limited-test"
+    prompt_version = "rate-limited-test-v1"
+
+    def generate_poster_image(self, *args, **kwargs):
+        cause = RuntimeError("429 Too many requests")
+        wrapped = RuntimeError("图片供应商请求失败，请检查供应商配置后重试")
+        raise wrapped from cause
+
+
 def test_workflow_run_kickoff_reuses_overlapping_active_node_runs(db_session, configured_env: Path) -> None:
     from productflow_backend.application.product_workflows import delete_workflow_node, start_product_workflow_run
 
@@ -724,6 +742,95 @@ def test_workflow_image_generation_provider_failure_uses_safe_reason(
     ).one()
     assert image_node.status == WorkflowNodeStatus.FAILED
     assert image_node.failure_reason == WORKFLOW_IMAGE_GENERATION_FAILURE
+
+
+def test_workflow_image_generation_provider_failure_exposes_safe_detail(
+    db_session,
+    configured_env: Path,
+) -> None:
+    from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
+    from productflow_backend.application.product_workflows import run_product_workflow
+
+    db_session.add(AppSetting(key="poster_generation_mode", value="generated"))
+    db_session.commit()
+
+    product = create_product(
+        db_session,
+        name="生图安全失败详情商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="workflow-provider-safe-failure.png",
+        content_type="image/png",
+    )
+
+    workflow = run_product_workflow(
+        db_session,
+        product_id=product.id,
+        dependencies=WorkflowExecutionDependencies(
+            image_provider_resolver=lambda: _SafeFailingWorkflowImageProvider(),
+        ),
+    )
+    db_session.expire_all()
+
+    run = (
+        db_session.query(WorkflowRun)
+        .filter_by(workflow_id=workflow.id)
+        .order_by(WorkflowRun.started_at.desc())
+        .first()
+    )
+    assert run is not None
+    assert run.status == WorkflowRunStatus.FAILED
+    assert run.failure_reason == "图片生成失败：image2 不支持 64x64，最小尺寸为 512x512"
+
+    image_node = db_session.query(WorkflowNode).filter_by(
+        workflow_id=workflow.id,
+        node_type=WorkflowNodeType.IMAGE_GENERATION,
+    ).one()
+    assert image_node.status == WorkflowNodeStatus.FAILED
+    assert image_node.failure_reason == run.failure_reason
+
+
+def test_workflow_image_generation_provider_failure_categorizes_wrapped_rate_limit(
+    db_session,
+    configured_env: Path,
+) -> None:
+    from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
+    from productflow_backend.application.product_workflows import run_product_workflow
+
+    db_session.add(AppSetting(key="poster_generation_mode", value="generated"))
+    db_session.commit()
+
+    product = create_product(
+        db_session,
+        name="生图限流失败商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="workflow-provider-rate-limit.png",
+        content_type="image/png",
+    )
+
+    workflow = run_product_workflow(
+        db_session,
+        product_id=product.id,
+        dependencies=WorkflowExecutionDependencies(
+            image_provider_resolver=lambda: _RateLimitedWorkflowImageProvider(),
+        ),
+    )
+    db_session.expire_all()
+
+    run = (
+        db_session.query(WorkflowRun)
+        .filter_by(workflow_id=workflow.id)
+        .order_by(WorkflowRun.started_at.desc())
+        .first()
+    )
+    assert run is not None
+    assert run.status == WorkflowRunStatus.FAILED
+    assert run.failure_reason == "图片供应商限流或配额不足，请稍后重试或降低并发后再试"
 
 
 def test_workflow_time_limit_exception_marks_running_node_failed(

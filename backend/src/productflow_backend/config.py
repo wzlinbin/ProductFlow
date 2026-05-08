@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 ConfigInputType = Literal["text", "password", "number", "boolean", "select", "multi_select", "textarea"]
 IMAGE_SIZE_PATTERN = re.compile(r"^\d+x\d+$")
 DEFAULT_IMAGE_GENERATION_MAX_DIMENSION = 3840
+IMAGE_GENERATION_MIN_DIMENSION = 512
 IMAGE_GENERATION_MIN_MAX_DIMENSION = 512
 IMAGE_GENERATION_MAX_MAX_DIMENSION = 8192
 IMAGE_GENERATION_MAX_DIMENSION = DEFAULT_IMAGE_GENERATION_MAX_DIMENSION
@@ -663,8 +664,8 @@ def normalize_image_generation_size(
     max_pixels = resolved_max_dimension * resolved_max_dimension
     width, height = (int(part) for part in normalized.split("x", maxsplit=1))
     scale = min(1.0, resolved_max_dimension / width, resolved_max_dimension / height)
-    resolved_width = min(resolved_max_dimension, max(1, round(width * scale)))
-    resolved_height = min(resolved_max_dimension, max(1, round(height * scale)))
+    resolved_width = min(resolved_max_dimension, max(IMAGE_GENERATION_MIN_DIMENSION, round(width * scale)))
+    resolved_height = min(resolved_max_dimension, max(IMAGE_GENERATION_MIN_DIMENSION, round(height * scale)))
     if resolved_width * resolved_height > max_pixels:
         pixel_scale = (max_pixels / (resolved_width * resolved_height)) ** 0.5
         resolved_width = max(1, int(resolved_width * pixel_scale))

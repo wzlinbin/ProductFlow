@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ImageSizeOption } from "../lib/imageSizes";
 import {
+  IMAGE_GENERATION_MIN_DIMENSION,
   formatImageSizeValue,
   getImageSizePresetDisplay,
   normalizeImageSizeValue,
@@ -135,7 +136,9 @@ export function ImageSizePicker({ value, presets, onChange, disabled = false, ma
           {customResolution ? (
             <>
               最终输出：{formatImageSizeValue(customResolution.value)}
-              {customResolution.calibrated ? `（已按单边 ${maxDimension ?? 3840} 安全边界自动校准）` : ""}
+              {customResolution.calibrated
+                ? `（已按单边 ${IMAGE_GENERATION_MIN_DIMENSION}-${maxDimension ?? 3840} 安全边界自动校准）`
+                : ""}
             </>
           ) : (
             "请输入正整数宽高；后端仍会做最终校验。"

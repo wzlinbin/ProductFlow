@@ -894,6 +894,78 @@ def test_image_session_worker_auto_retry_caps_and_uses_generic_safe_reason(
     assert calls["count"] == IMAGE_SESSION_GENERATION_MAX_ATTEMPTS
 
 
+def test_image_session_worker_exposes_safe_provider_failure_detail(
+    configured_env: Path,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    def fail_generate(*args, **kwargs) -> None:
+        raise RuntimeError("image2 不支持 64x64，最小尺寸为 512x512")
+
+    monkeypatch.setattr(
+        "productflow_backend.infrastructure.image.chat_service.ImageChatService.generate",
+        fail_generate,
+    )
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+
+    created = client.post("/api/image-sessions", json={"title": "provider 安全失败详情"})
+    assert created.status_code == 201
+    response = client.post(
+        f"/api/image-sessions/{created.json()['id']}/generate",
+        json={"prompt": "这次 provider 会返回安全失败详情", "size": "1024x1024"},
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["generation_tasks"][0]["status"] == "failed"
+    assert payload["generation_tasks"][0]["failure_reason"] == "图片生成失败：image2 不支持 64x64，最小尺寸为 512x512"
+    db_session.expire_all()
+    task = db_session.get(ImageSessionGenerationTask, payload["generation_tasks"][0]["id"])
+    assert task is not None
+    assert task.failure_reason == "图片生成失败：image2 不支持 64x64，最小尺寸为 512x512"
+
+
+def test_image_session_worker_categorizes_wrapped_connection_failure(
+    configured_env: Path,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    def fail_generate(*args, **kwargs) -> None:
+        cause = ConnectionError("connection reset by peer")
+        wrapped = RuntimeError("图片供应商请求失败，请检查供应商配置后重试")
+        raise wrapped from cause
+
+    monkeypatch.setattr(
+        "productflow_backend.infrastructure.image.chat_service.ImageChatService.generate",
+        fail_generate,
+    )
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+
+    created = client.post("/api/image-sessions", json={"title": "provider 断流失败"})
+    assert created.status_code == 201
+    response = client.post(
+        f"/api/image-sessions/{created.json()['id']}/generate",
+        json={"prompt": "这次 provider 会断流", "size": "1024x1024"},
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["generation_tasks"][0]["status"] == "failed"
+    assert payload["generation_tasks"][0]["failure_reason"] == "图片供应商连接中断，请检查网络或代理后重试"
+    db_session.expire_all()
+    task = db_session.get(ImageSessionGenerationTask, payload["generation_tasks"][0]["id"])
+    assert task is not None
+    assert task.failure_reason == "图片供应商连接中断，请检查网络或代理后重试"
+
+
 def test_image_session_worker_surfaces_completed_text_without_image_reason(
     configured_env: Path,
     db_session,
@@ -1585,6 +1657,13 @@ def test_image_session_generation_accepts_custom_size_and_rejects_invalid_dimens
     assert generated.status_code == 202
     assert generated.json()["rounds"][-1]["size"] == "1280x720"
     generated_asset_id = generated.json()["rounds"][-1]["generated_asset"]["id"]
+
+    undersized = client.post(
+        f"/api/image-sessions/{session_id}/generate",
+        json={"prompt": "供应商下限回退", "size": "64x64", "base_asset_id": generated_asset_id},
+    )
+    assert undersized.status_code == 202
+    assert undersized.json()["rounds"][-1]["size"] == "512x512"
 
     zero = client.post(
         f"/api/image-sessions/{session_id}/generate",

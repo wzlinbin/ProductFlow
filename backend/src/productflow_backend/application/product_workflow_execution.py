@@ -18,6 +18,7 @@ from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.admission import ensure_generation_capacity, generation_running_capacity_available
 from productflow_backend.application.contracts import PosterGenerationInput, ProductInput
 from productflow_backend.application.image_generation_core import build_stored_image_reference_payload
+from productflow_backend.application.image_generation_failures import safe_image_generation_failure_reason
 from productflow_backend.application.product_workflow_artifacts import (
     GeneratedWorkflowImage,
     copy_node_output,
@@ -1059,7 +1060,9 @@ def _generate_workflow_images_concurrently(
                     render_input.copy_prompt_mode,
                     type(exc).__name__,
                 )
-                raise WorkflowImageGenerationProviderError(WORKFLOW_IMAGE_GENERATION_FAILURE) from exc
+                raise WorkflowImageGenerationProviderError(
+                    safe_image_generation_failure_reason(exc, generic_message=WORKFLOW_IMAGE_GENERATION_FAILURE)
+                ) from exc
             return GeneratedWorkflowImage(
                 target_index=target_index,
                 content=generated_image.bytes_data,

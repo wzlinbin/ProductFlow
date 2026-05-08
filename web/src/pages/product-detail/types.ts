@@ -14,11 +14,13 @@ export type CanvasRect = {
 
 export type NodeDragState = {
   nodeId: string;
+  nodeIds: string[];
   pointerId: number;
   offsetX: number;
   offsetY: number;
   currentX: number;
   currentY: number;
+  originPositions: Record<string, CanvasPoint>;
 };
 
 export type ConnectionDragState = {

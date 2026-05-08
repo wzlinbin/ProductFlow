@@ -52,6 +52,7 @@ interface UseWorkflowCanvasOptions {
   structureBusy: boolean;
   onSelectNode: (nodeId: string) => void;
   onNodeDragStartSelect: (nodeId: string) => void;
+  getNodeDragGroup: (nodeId: string) => string[];
   onSelectionBoxComplete: (nodeIds: string[]) => void;
   onNodePositionCommit: (input: NodePositionCommitInput) => void;
   onConnectionCreate: (input: { sourceNodeId: string; targetNodeId: string }) => void;
@@ -70,6 +71,34 @@ export function getFinalNodeDragPosition(point: CanvasPoint, drag: Pick<NodeDrag
     x: Math.max(NODE_MIN_X, Math.round(point.x - drag.offsetX)),
     y: Math.max(NODE_MIN_Y, Math.round(point.y - drag.offsetY)),
   };
+}
+
+export function getNodeDragPositions(
+  point: CanvasPoint,
+  drag: Pick<NodeDragState, "nodeId" | "offsetX" | "offsetY" | "originPositions">,
+  options: { round?: boolean } = {},
+): Record<string, CanvasPoint> {
+  const draggedOrigin = drag.originPositions[drag.nodeId];
+  if (!draggedOrigin) {
+    return {};
+  }
+  const rawDeltaX = point.x - drag.offsetX - draggedOrigin.x;
+  const rawDeltaY = point.y - drag.offsetY - draggedOrigin.y;
+  const minOriginX = Math.min(...Object.values(drag.originPositions).map((position) => position.x));
+  const minOriginY = Math.min(...Object.values(drag.originPositions).map((position) => position.y));
+  const deltaX = Math.max(NODE_MIN_X - minOriginX, rawDeltaX);
+  const deltaY = Math.max(NODE_MIN_Y - minOriginY, rawDeltaY);
+  const normalizeCoordinate = options.round === false ? (value: number) => value : Math.round;
+
+  return Object.fromEntries(
+    Object.entries(drag.originPositions).map(([nodeId, origin]) => [
+      nodeId,
+      {
+        x: Math.max(NODE_MIN_X, normalizeCoordinate(origin.x + deltaX)),
+        y: Math.max(NODE_MIN_Y, normalizeCoordinate(origin.y + deltaY)),
+      },
+    ]),
+  );
 }
 
 export function getNodePositionForViewportCenter(center: CanvasPoint): CanvasPoint {
@@ -94,6 +123,7 @@ export function useWorkflowCanvas({
   structureBusy,
   onSelectNode,
   onNodeDragStartSelect,
+  getNodeDragGroup,
   onSelectionBoxComplete,
   onNodePositionCommit,
   onConnectionCreate,
@@ -180,8 +210,13 @@ export function useWorkflowCanvas({
 
   const getRenderedNodePosition = (node: WorkflowNode): CanvasPoint => {
     const activeDrag = nodeDragRef.current;
-    if (activeDrag?.nodeId === node.id) {
-      return { x: activeDrag.currentX, y: activeDrag.currentY };
+    const activeDragPosition = activeDrag?.originPositions[node.id];
+    if (activeDragPosition) {
+      const draggedOrigin = activeDrag.originPositions[activeDrag.nodeId] ?? activeDragPosition;
+      return {
+        x: activeDragPosition.x + activeDrag.currentX - draggedOrigin.x,
+        y: activeDragPosition.y + activeDrag.currentY - draggedOrigin.y,
+      };
     }
     const optimisticPosition = optimisticNodePositions[node.id];
     if (optimisticPosition) {
@@ -450,13 +485,25 @@ export function useWorkflowCanvas({
     const point = getCanvasPoint(event.clientX, event.clientY);
     onNodeDragStartSelect(node.id);
     const renderedPosition = getRenderedNodePosition(node);
+    const selectedGroup = getNodeDragGroup(node.id);
+    const groupNodeIds = selectedGroup.includes(node.id) ? selectedGroup : [node.id];
+    const groupNodes =
+      workflow?.nodes.filter((workflowNode) => groupNodeIds.includes(workflowNode.id)) ?? [node];
+    const originPositions = Object.fromEntries(
+      groupNodes.map((workflowNode) => [
+        workflowNode.id,
+        getRenderedNodePosition(workflowNode),
+      ]),
+    );
     const nextDrag = {
       nodeId: node.id,
+      nodeIds: Object.keys(originPositions),
       pointerId: event.pointerId,
       offsetX: point.x - renderedPosition.x,
       offsetY: point.y - renderedPosition.y,
       currentX: renderedPosition.x,
       currentY: renderedPosition.y,
+      originPositions,
     };
     nodeDragRef.current = nextDrag;
     setNodeDrag(nextDrag);
@@ -469,14 +516,23 @@ export function useWorkflowCanvas({
     }
     event.preventDefault();
     const point = getCanvasPoint(event.clientX, event.clientY);
+    const nextPositions = getNodeDragPositions(point, activeDrag, { round: false });
+    const draggedPosition = nextPositions[activeDrag.nodeId] ?? {
+      x: activeDrag.currentX,
+      y: activeDrag.currentY,
+    };
     const nextDrag = {
       ...activeDrag,
-      currentX: Math.max(NODE_MIN_X, point.x - activeDrag.offsetX),
-      currentY: Math.max(NODE_MIN_Y, point.y - activeDrag.offsetY),
+      currentX: draggedPosition.x,
+      currentY: draggedPosition.y,
     };
     nodeDragRef.current = nextDrag;
-    applyNodeElementPosition(nextDrag.nodeId, { x: nextDrag.currentX, y: nextDrag.currentY });
-    applyConnectedEdgePositions(nextDrag.nodeId);
+    for (const [nodeId, position] of Object.entries(nextPositions)) {
+      applyNodeElementPosition(nodeId, position);
+    }
+    for (const nodeId of activeDrag.nodeIds) {
+      applyConnectedEdgePositions(nodeId);
+    }
   };
 
   const cancelNodeDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -504,25 +560,41 @@ export function useWorkflowCanvas({
     }
     restoreBodyUserSelect();
     const point = getCanvasPoint(event.clientX, event.clientY);
-    const finalPosition = getFinalNodeDragPosition(point, activeDrag);
-    const dragged = workflow?.nodes.find((node) => node.id === activeDrag.nodeId);
-    if (dragged && (dragged.position_x !== finalPosition.x || dragged.position_y !== finalPosition.y)) {
-      const mutationVersion = (nodePositionMutationVersionsRef.current[dragged.id] ?? 0) + 1;
-      nodePositionMutationVersionsRef.current[dragged.id] = mutationVersion;
+    const finalPositions = getNodeDragPositions(point, activeDrag);
+    const draggedPosition = finalPositions[activeDrag.nodeId];
+    if (draggedPosition) {
       nodeDragRef.current = {
         ...activeDrag,
-        currentX: finalPosition.x,
-        currentY: finalPosition.y,
+        currentX: draggedPosition.x,
+        currentY: draggedPosition.y,
       };
-      applyNodeElementPosition(dragged.id, finalPosition);
-      applyConnectedEdgePositions(dragged.id);
-      setOptimisticNodePositions((current) => ({ ...current, [dragged.id]: finalPosition }));
-      onNodePositionCommit({
-        node: dragged,
-        position_x: finalPosition.x,
-        position_y: finalPosition.y,
-        mutationVersion,
-      });
+    }
+    const movedEntries =
+      workflow?.nodes
+        .map((workflowNode) => ({ node: workflowNode, position: finalPositions[workflowNode.id] }))
+        .filter(
+          (entry): entry is { node: WorkflowNode; position: CanvasPoint } =>
+            Boolean(entry.position) &&
+            (entry.node.position_x !== entry.position.x || entry.node.position_y !== entry.position.y),
+        ) ?? [];
+    if (movedEntries.length) {
+      const nextOptimisticPositions: Record<string, CanvasPoint> = {};
+      for (const { node: movedNode, position } of movedEntries) {
+        const mutationVersion = (nodePositionMutationVersionsRef.current[movedNode.id] ?? 0) + 1;
+        nodePositionMutationVersionsRef.current[movedNode.id] = mutationVersion;
+        applyNodeElementPosition(movedNode.id, position);
+        nextOptimisticPositions[movedNode.id] = position;
+        onNodePositionCommit({
+          node: movedNode,
+          position_x: position.x,
+          position_y: position.y,
+          mutationVersion,
+        });
+      }
+      for (const { node: movedNode } of movedEntries) {
+        applyConnectedEdgePositions(movedNode.id);
+      }
+      setOptimisticNodePositions((current) => ({ ...current, ...nextOptimisticPositions }));
     }
     nodeDragRef.current = null;
     setNodeDrag(null);

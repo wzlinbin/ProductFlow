@@ -51,6 +51,22 @@ describe("image size helpers", () => {
     expect(resolveImageSize(100, 0)).toBeNull();
   });
 
+  it("calibrates undersized dimensions to provider minimum bounds", () => {
+    expect(resolveImageSize(64, 64)).toEqual({
+      width: 512,
+      height: 512,
+      value: "512x512",
+      calibrated: true,
+    });
+    expect(normalizeImageSizeValue("64X64")).toBe("512x512");
+    expect(resolveImageSize(256, 1024)).toEqual({
+      width: 512,
+      height: 1024,
+      value: "512x1024",
+      calibrated: true,
+    });
+  });
+
   it("filters built-in presets by runtime max dimension", () => {
     expect(buildImageSizeOptions(2048).map((option) => option.value)).toEqual([
       "1024x1024",

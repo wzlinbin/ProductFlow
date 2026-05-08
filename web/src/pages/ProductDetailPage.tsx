@@ -16,6 +16,7 @@ import {
   Play,
   Plus,
   Settings2,
+  Trash2,
   X,
   ZoomIn,
   ZoomOut,
@@ -268,10 +269,12 @@ export function ProductDetailPage() {
     const currentWorkflow = queryClient.getQueryData<ProductWorkflow>(["product-workflow", productId]);
     const shouldRefetchWorkflow = shouldRefreshProductWorkflowDetailFromStatus(currentWorkflow, status);
     if (currentWorkflow) {
-      queryClient.setQueryData(
-        ["product-workflow", productId],
-        mergeProductWorkflowStatusIntoDetail(currentWorkflow, status),
-      );
+      const nextWorkflow = mergeProductWorkflowStatusIntoDetail(currentWorkflow, status);
+      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      const latestRun = nextWorkflow.runs[0];
+      if (latestRun?.status === "failed" && latestRun.failure_reason) {
+        setError(latestRun.failure_reason);
+      }
     }
     if (shouldRefetchWorkflow) {
       void queryClient.invalidateQueries({ queryKey: ["product-workflow", productId] });
@@ -688,7 +691,22 @@ export function ProductDetailPage() {
         return;
       }
       setError("");
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      const updatedNode = nextWorkflow.nodes.find((node) => node.id === input.node.id);
+      queryClient.setQueryData<ProductWorkflow>(
+        ["product-workflow", productId],
+        (current) => {
+          if (!current || !updatedNode) {
+            return nextWorkflow;
+          }
+          return {
+            ...current,
+            nodes: current.nodes.map((node) => (node.id === updatedNode.id ? updatedNode : node)),
+            edges: nextWorkflow.edges,
+            runs: nextWorkflow.runs,
+            updated_at: nextWorkflow.updated_at,
+          };
+        },
+      );
       workflowCanvasRef.current.clearOptimisticNodePosition(input.node.id);
     },
     onError: (mutationError, _input, context) => {
@@ -772,6 +790,49 @@ export function ProductDetailPage() {
       return;
     }
     deleteNodeMutation.mutate(node.id);
+  };
+
+  const deleteSelectedNodesMutation = useMutation({
+    mutationFn: async (nodeIds: string[]) => {
+      if (nodeIds.length < 2) {
+        throw new Error("请先多选要删除的节点");
+      }
+      let nextWorkflow: ProductWorkflow | null = null;
+      for (const nodeId of nodeIds) {
+        nextWorkflow = await api.deleteWorkflowNode(nodeId);
+      }
+      if (!nextWorkflow) {
+        throw new Error("删除节点失败");
+      }
+      return nextWorkflow;
+    },
+    onSuccess: (nextWorkflow) => {
+      setError("");
+      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      const nextPrimaryNodeId = nextWorkflow.nodes[0]?.id ?? null;
+      setSelectedNodeId(nextPrimaryNodeId);
+      setSelectedNodeIds(clearSelectedNodeGroup(nextPrimaryNodeId));
+      setTemplateSaveOpen(false);
+    },
+    onError: (mutationError) => {
+      setError(
+        mutationError instanceof ApiError
+          ? mutationError.detail
+          : mutationError instanceof Error
+            ? mutationError.message
+            : "删除选中节点失败",
+      );
+    },
+  });
+
+  const handleDeleteSelectedNodes = () => {
+    if (selectedNodeIds.length < 2) {
+      return;
+    }
+    if (!window.confirm(`确定删除选中的 ${selectedNodeIds.length} 个节点吗？关联连线也会删除。`)) {
+      return;
+    }
+    deleteSelectedNodesMutation.mutate([...selectedNodeIds]);
   };
 
   const uploadNodeImageMutation = useMutation({
@@ -917,6 +978,7 @@ export function ProductDetailPage() {
     createEdgeMutation.isPending ||
     deleteEdgeMutation.isPending ||
     deleteNodeMutation.isPending ||
+    deleteSelectedNodesMutation.isPending ||
     uploadNodeImageMutation.isPending ||
     bindNodeImageMutation.isPending ||
     updateNodeCopyMutation.isPending;
@@ -927,43 +989,45 @@ export function ProductDetailPage() {
   const workflowRunActionBusyRunId =
     (cancelWorkflowRunMutation.isPending ? cancelWorkflowRunMutation.variables : null) ??
     (retryWorkflowRunMutation.isPending ? retryWorkflowRunMutation.variables : null);
+  const commitNodePosition = (input: NodePositionCommitInput) => {
+    const rollbackWorkflow = queryClient.getQueryData<ProductWorkflow>([
+      "product-workflow",
+      productId,
+    ]);
+    queryClient.setQueryData<ProductWorkflow>(
+      ["product-workflow", productId],
+      (current) => {
+        if (!current) {
+          return current;
+        }
+        return {
+          ...current,
+          nodes: current.nodes.map((node) =>
+            node.id === input.node.id
+              ? {
+                  ...node,
+                  position_x: input.position_x,
+                  position_y: input.position_y,
+                }
+              : node,
+          ),
+        };
+      },
+    );
+    updateNodePositionMutation.mutate({
+      ...input,
+      rollbackWorkflow,
+    });
+  };
   const workflowCanvas = useWorkflowCanvas({
     workflow,
     zoomStorageKey: "productflow.workflow.zoom",
     structureBusy,
     onSelectNode: selectNodeForDetails,
     onNodeDragStartSelect: selectNodeForDragStart,
+    getNodeDragGroup: (nodeId) => (selectedNodeIds.includes(nodeId) ? selectedNodeIds : [nodeId]),
     onSelectionBoxComplete: replaceSelectionFromBox,
-    onNodePositionCommit: (input: NodePositionCommitInput) => {
-      const rollbackWorkflow = queryClient.getQueryData<ProductWorkflow>([
-        "product-workflow",
-        productId,
-      ]);
-      queryClient.setQueryData<ProductWorkflow>(
-        ["product-workflow", productId],
-        (current) => {
-          if (!current) {
-            return current;
-          }
-          return {
-            ...current,
-            nodes: current.nodes.map((node) =>
-              node.id === input.node.id
-                ? {
-                    ...node,
-                    position_x: input.position_x,
-                    position_y: input.position_y,
-                  }
-                : node,
-            ),
-          };
-        },
-      );
-      updateNodePositionMutation.mutate({
-        ...input,
-        rollbackWorkflow,
-      });
-    },
+    onNodePositionCommit: commitNodePosition,
     onConnectionCreate: (input) => createEdgeMutation.mutate(input),
   });
   workflowCanvasRef.current = workflowCanvas;
@@ -1225,7 +1289,7 @@ export function ProductDetailPage() {
                         primarySelected={node.id === selectedNode?.id}
                         secondarySelected={selectedNodeIdSet.has(node.id) && node.id !== selectedNode?.id}
                         previewSelected={previewSelectedNodeIds.includes(node.id)}
-                        dragging={nodeDrag?.nodeId === node.id}
+                        dragging={nodeDrag?.nodeIds.includes(node.id) ?? false}
                         onSelect={(event) => selectNodeFromPointer(node.id, event)}
                         onStartDrag={(event) => startNodeDrag(node, event)}
                         onMoveDrag={moveNodeDrag}
@@ -1300,6 +1364,19 @@ export function ProductDetailPage() {
                         <Save size={14} />
                       )}
                       保存模板
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedNodes}
+                      disabled={deleteSelectedNodesMutation.isPending || structureBusy}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deleteSelectedNodesMutation.isPending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                      删除
                     </button>
                     <button
                       type="button"

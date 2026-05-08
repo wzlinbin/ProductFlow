@@ -523,8 +523,10 @@ returns the normal `ProductWorkflow`.
   share one SQLAlchemy `Session` across provider threads.
 - Resolve runtime settings and construct provider/renderer dependencies before starting provider/render worker threads, so
   those threads do not open SQLAlchemy sessions just to read config while images are being generated.
-- `image_generation` node config may override provider size with `size`; application contracts must carry this as
-  `PosterGenerationInput.image_size` and providers should prefer it over global runtime defaults.
+- `image_generation` node config may override provider size with `size`; application contracts must normalize it to the
+  generation safety bounds before it reaches providers, including a 512px minimum per side and the runtime maximum
+  dimension. The normalized value is carried as `PosterGenerationInput.image_size`, and providers should prefer it over
+  global runtime defaults.
 - `image_generation` node config may override image-generation tool parameters with `tool_options`; application contracts
   must carry this as `PosterGenerationInput.tool_options`, and generated-mode providers should pass it into their image
   client/tool builder after normalizing blank/null values.
@@ -884,8 +886,15 @@ and workflow runs share the same behavior.
   and return `503` with `任务队列暂不可用，请稍后重试`.
 - Workflow image provider timeout -> mark the active run and image node run `failed`, set `finished_at`, use
   `图片生成超时，请稍后重试`, and release global generation queue capacity.
+- Workflow image provider failures with recognized safe categories should not collapse into one generic message. Use
+  concise user-facing reasons for rate limit/quota, content-policy refusal, connection interruption, provider request
+  timeout, unsupported parameters, and provider 5xx/service failure; inspect wrapped exception causes/contexts when the
+  outer provider layer uses a generic request-failure message.
+- Workflow image provider failure with safe details such as unsupported dimensions -> mark failed with a concise prefixed
+  reason such as `图片生成失败：image2 不支持 64x64，最小尺寸为 512x512`.
 - Workflow image provider failure with raw provider details -> mark failed with a generic safe reason such as
-  `图片生成失败，请稍后重试`; never expose secrets or prompt payloads through `failure_reason`.
+  `图片生成失败，请稍后重试`; never expose secrets, base URLs, prompt payloads, request bodies, file paths, or tracebacks
+  through `failure_reason`.
 - Duplicate Redis message for terminal run -> no-op and do not call providers.
 - Duplicate Redis message while another worker owns a non-stale running node -> no-op and do not call providers.
 - Delete a node while its workflow has an active run, or while the node is `queued` / `running` -> `400` with

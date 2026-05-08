@@ -45,7 +45,8 @@
   zoom controls, uploads, and panel resize handles do not start background panning.
 - ProductDetail supports canvas node multi-select through local UI state. Keep `selectedNodeId` as the primary node that
   drives the Details sidebar, draft saving, reference-image fill target, and node-level run/delete/cancel/upload actions.
-  Keep `selectedNodeIds` as the selected node group for future group actions such as saving a node-group template. Normal
+  Keep `selectedNodeIds` as the selected node group for group actions such as saving a node-group template, group drag,
+  and group delete. Normal
   node click replaces the group with that node; Ctrl/Cmd/Shift click toggles a node in the group and makes newly added
   nodes primary; Shift-drag on empty canvas draws a transient selection rectangle and replaces the group with intersecting
   nodes. Clicking a secondary selected node without modifiers makes it the primary Details node while preserving the
@@ -63,7 +64,7 @@
 - Treat multi-select as a temporary grouping state, not the default canvas mode. Ordinary non-group actions should collapse
   the group back to a single primary node, including blank-canvas click, adding a node, deleting a node or edge, creating
   an edge, uploading/filling a reference image, or applying a node-group template. Future save-as-template and deliberate
-  group drag/move flows may consume the full `selectedNodeIds` group instead of clearing it.
+  group drag/delete flows consume the full `selectedNodeIds` group instead of clearing it before the operation.
 - If the browser emits a click after completing a Shift-drag lasso selection, that click must not be treated as a
   blank-canvas clear action. Skip only that immediate synthetic/paired click; later blank-canvas clicks should still exit
   multi-select.
@@ -73,6 +74,10 @@
 - If the same node is dropped again before an earlier position mutation resolves, protect the latest optimistic position
   from stale mutation success/error handlers; serialize or version position mutations so older responses cannot overwrite
   the newest drop and cause a one-frame old-position flash.
+- Dragging any node in a multi-selected group should move every selected node by the same canvas delta, keep internal
+  spacing, update connected edges while dragging, clamp the whole group to the canvas minimum, and persist each moved node
+  through the normal `updateWorkflowNode(...)` position mutation. Position mutation success must not overwrite other
+  pending group positions with stale full-workflow responses.
 - Edges are created by dragging an output handle to a target handle/node and showing a temporary SVG connection while
   dragging.
 - Edge deletion is a canvas action and must call `deleteWorkflowEdge(edgeId)` before refreshing
@@ -212,6 +217,10 @@
 - Image URLs from workflow-created source assets and poster artifacts still go through `api.toApiUrl(...)`.
 - Direct image runs without downstream reference slots should show the backend error near the workflow action/node; do not
   invent a fallback preview on the image-generation node.
+- Image-size inputs smaller than the provider-safe lower bound must be calibrated in the picker before submission, matching
+  the backend 512px minimum per side. The user-facing custom-size hint should show the calibrated final output.
+- When async workflow polling observes a failed run with `failure_reason`, ProductDetail should surface that reason in the
+  global workflow error area as well as node/run detail surfaces.
 
 ### 5. Good/Base/Bad Cases
 
@@ -234,6 +243,10 @@
   `selectedNodeIds` remains the group for future template saving or batch actions.
 - Base: clicking a secondary selected node opens that node in Details while keeping the group selected; clicking blank
   canvas or performing ordinary node/edge/image mutations exits multi-select back to one primary node.
+- Base: dragging a secondary selected node makes it primary for Details but keeps the group selected and moves the whole
+  selected group.
+- Base: deleting from the multi-select control confirms once, calls backend node deletion for selected nodes, and exits to
+  a single remaining primary node after success.
 - Base: while a workflow run is active, users can still drag nodes to reorganize the canvas and may run another
   non-queued/non-running node; the backend rejects overlapping planned nodes and the UI still blocks unsafe structural
   changes.

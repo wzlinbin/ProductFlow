@@ -20,6 +20,7 @@ export interface ImageSizePresetDisplay {
 
 export const IMAGE_SIZE_PATTERN = /^\d+x\d+$/;
 export const DEFAULT_IMAGE_GENERATION_MAX_DIMENSION = 3840;
+export const IMAGE_GENERATION_MIN_DIMENSION = 512;
 export const IMAGE_GENERATION_MIN_MAX_DIMENSION = 512;
 export const IMAGE_GENERATION_MAX_MAX_DIMENSION = 8192;
 export const IMAGE_GENERATION_MAX_DIMENSION = DEFAULT_IMAGE_GENERATION_MAX_DIMENSION;
@@ -78,8 +79,8 @@ export function resolveImageSize(width: number, height: number, maxDimension?: n
 
   let scale = Math.min(1, resolvedMaxDimension / requestedWidth, resolvedMaxDimension / requestedHeight);
   const dimensionCalibrated = scale < 1;
-  let resolvedWidth = Math.min(resolvedMaxDimension, Math.max(1, Math.round(requestedWidth * scale)));
-  let resolvedHeight = Math.min(resolvedMaxDimension, Math.max(1, Math.round(requestedHeight * scale)));
+  let resolvedWidth = Math.min(resolvedMaxDimension, Math.max(IMAGE_GENERATION_MIN_DIMENSION, Math.round(requestedWidth * scale)));
+  let resolvedHeight = Math.min(resolvedMaxDimension, Math.max(IMAGE_GENERATION_MIN_DIMENSION, Math.round(requestedHeight * scale)));
 
   const resolvedPixels = resolvedWidth * resolvedHeight;
   let pixelCalibrated = false;

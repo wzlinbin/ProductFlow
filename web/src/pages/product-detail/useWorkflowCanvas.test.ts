@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildConnectionDragPath,
   getFinalNodeDragPosition,
+  getNodeDragPositions,
   getNodePositionForViewportCenter,
   getWheelZoom,
   normalizeWorkflowZoom,
@@ -37,6 +38,46 @@ describe("workflow canvas pure helpers", () => {
     expect(getFinalNodeDragPosition({ x: 12, y: 12 }, { offsetX: 30, offsetY: 40 })).toEqual({
       x: 24,
       y: 24,
+    });
+  });
+
+  it("moves selected node groups by a shared rounded delta", () => {
+    expect(
+      getNodeDragPositions(
+        { x: 177.4, y: 230.8 },
+        {
+          nodeId: "a",
+          offsetX: 7.4,
+          offsetY: 10.8,
+          originPositions: {
+            a: { x: 100, y: 120 },
+            b: { x: 360, y: 240 },
+          },
+        },
+      ),
+    ).toEqual({
+      a: { x: 170, y: 220 },
+      b: { x: 430, y: 340 },
+    });
+  });
+
+  it("clamps selected node groups without changing their relative spacing", () => {
+    expect(
+      getNodeDragPositions(
+        { x: -100, y: -80 },
+        {
+          nodeId: "a",
+          offsetX: 10,
+          offsetY: 10,
+          originPositions: {
+            a: { x: 100, y: 120 },
+            b: { x: 40, y: 70 },
+          },
+        },
+      ),
+    ).toEqual({
+      a: { x: 84, y: 74 },
+      b: { x: 24, y: 24 },
     });
   });
 

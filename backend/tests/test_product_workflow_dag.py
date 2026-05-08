@@ -1175,6 +1175,14 @@ def test_image_generation_node_normalizes_custom_size_and_rejects_unsafe_dimensi
     updated_image_node = next(node for node in updated.json()["nodes"] if node["id"] == image_node["id"])
     assert updated_image_node["config_json"]["size"] == "3840x2160"
 
+    undersized = client.patch(
+        f"/api/workflow-nodes/{image_node['id']}",
+        json={"config_json": {"instruction": "供应商下限回退", "size": "64x64"}},
+    )
+    assert undersized.status_code == 200
+    undersized_image_node = next(node for node in undersized.json()["nodes"] if node["id"] == image_node["id"])
+    assert undersized_image_node["config_json"]["size"] == "512x512"
+
     invalid_zero = client.patch(
         f"/api/workflow-nodes/{image_node['id']}",
         json={"config_json": {"instruction": "非法尺寸", "size": "0x2160"}},

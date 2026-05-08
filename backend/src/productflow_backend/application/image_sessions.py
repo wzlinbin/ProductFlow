@@ -26,6 +26,7 @@ from productflow_backend.application.image_generation_core import (
     provider_output_with_actual_image_size,
     unique_image_generation_ids,
 )
+from productflow_backend.application.image_generation_failures import safe_image_generation_failure_reason
 from productflow_backend.application.queue_submission import enqueue_or_mark_failed
 from productflow_backend.application.time import now_utc
 from productflow_backend.config import normalize_image_generation_size
@@ -668,7 +669,11 @@ def _execute_image_session_round_generation(
                 requested_candidates=generation_count,
                 generation_group_id=generation_group_id if completed_candidates else None,
                 timed_out=isinstance(exc, TimeLimitExceeded),
-                safe_reason=str(exc) if str(exc) == PROVIDER_TEXT_OUTPUT_MESSAGE else None,
+                safe_reason=(
+                    str(exc)
+                    if str(exc) == PROVIDER_TEXT_OUTPUT_MESSAGE
+                    else safe_image_generation_failure_reason(exc, generic_message=GENERIC_IMAGE_GENERATION_FAILURE)
+                ),
             ) from exc
     session.expire_all()
     return ImageSessionRoundGenerationResult(
