@@ -183,6 +183,7 @@ class CanvasTemplatePreviewNodeResponse(BaseModel):
     title: str
     position_x: int
     position_y: int
+    size: str | None = None
 
 
 class CanvasTemplatePreviewEdgeResponse(BaseModel):
@@ -416,6 +417,7 @@ def serialize_canvas_template_summary(template: CanvasTemplate) -> CanvasTemplat
                 title=item.title,
                 position_x=item.position_x,
                 position_y=item.position_y,
+                size=item.size,
             )
             for item in template.nodes
         ],

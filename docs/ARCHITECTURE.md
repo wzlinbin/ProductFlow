@@ -96,8 +96,8 @@ ProductWorkflow
 画布模板链路：
 
 ```text
-CanvasTemplate(builtin full_canvas/node_group)
-  -> product creation or workflow node group insertion
+CanvasTemplate(builtin full_canvas)
+  -> product creation or workflow template insertion
 
 UserCanvasTemplate(node_group)
   -> reusable selected workflow nodes and internal edges
@@ -114,8 +114,8 @@ PostgreSQL 是元数据和运行状态的权威存储；Redis/Dramatiq 只负责
 
 画布模板的边界：
 
-- `full_canvas` 模板只用于创建商品时初始化完整工作流。
-- `node_group` 模板只用于已有商品工作台中追加流程，不能包含 `product_context` 节点。
+- 内置 `full_canvas` 场景模板可在创建商品时初始化完整工作流，也可在已有商品工作台中追加同一套场景模板。
+- 追加内置场景模板时，模板里的 `product_context` 会复用当前活动工作流已有的商品资料节点，不会创建第二个商品节点。
 - 用户节点组模板由多选节点保存而来，只持久化可复用配置和选中节点之间的内部连线，不保存商品资料、生成图片或文案产物。
 
 ## 5. 异步任务与恢复

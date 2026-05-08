@@ -552,7 +552,7 @@ export function ProductDetailPage() {
       setError(
         mutationError instanceof ApiError
           ? mutationError.detail
-          : "添加节点组失败",
+          : "添加模板失败",
       );
     },
   });
@@ -1109,9 +1109,7 @@ export function ProductDetailPage() {
   const fillReferenceBusy = bindNodeImageMutation.isPending;
   const queueOverview = queueOverviewQuery.data ?? null;
   const showQueueOverview = Boolean(queueOverview && queueOverview.active_count > 0);
-  const nodeGroupTemplates = (canvasTemplatesQuery.data?.items ?? []).filter(
-    (template) => template.kind === "node_group",
-  );
+  const canvasTemplates = canvasTemplatesQuery.data?.items ?? [];
   const userTemplateMutationBusy =
     createUserTemplateGroupMutation.isPending ||
     updateUserTemplateGroupMutation.isPending ||
@@ -1596,7 +1594,7 @@ export function ProductDetailPage() {
                 ) : null}
                 {activeSidebarTab === "templates" ? (
                   <TemplateGroupsPanel
-                    templates={nodeGroupTemplates}
+                    templates={canvasTemplates}
                     isLoading={canvasTemplatesQuery.isLoading}
                     isError={canvasTemplatesQuery.isError}
                     structureBusy={structureBusy || !workflow}

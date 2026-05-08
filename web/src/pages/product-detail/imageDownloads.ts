@@ -76,12 +76,7 @@ export function getNodeImageDownload(
       )
       .find((item): item is SourceAsset => Boolean(item));
     return asset
-      ? buildSourceImageDownload(
-          product,
-          asset,
-          node.title || "参考图",
-          asset.thumbnail_url,
-        )
+      ? buildSourceImageDownload(product, asset, node.title || "参考图")
       : null;
   }
   return null;

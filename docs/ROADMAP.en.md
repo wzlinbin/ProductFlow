@@ -18,8 +18,8 @@ Completed baseline capabilities:
 - Product DAG workflow editing, execution, persistent state, and recovery.
 - Shared top navigation.
 - ProductFlow workbench canvas interactions: mouse-wheel zoom, left-drag pan, node drag positioning, box selection / multi-select, and edge drag creation/deletion.
-- Full-canvas templates for product creation: blank canvas, product main image, model/lifestyle image, usage scene image, and campaign/promotion image.
-- Workbench node-group templates: built-in groups can be inserted into existing canvases, and users can save selected nodes as their own node-group templates with rename and archive-delete support.
+- Full scenario templates for product creation: blank canvas, marketplace hero images, detail persuasion, scene galleries, content covers, and campaign assets.
+- Workbench templates: the same built-in scenario templates can be inserted into existing canvases and automatically reuse the product node; users can save selected nodes as their own node-group templates with rename and archive-delete support.
 - Single-slot semantics for reference images, image drag-and-drop upload, compact right sidebar for Details / Runs / Images / Templates, and asset fill.
 - In-product help page: `/help` covers quick start, canvas operations, templates, run failure handling, supported operations, and common questions.
 - Prompt configuration: product understanding, copy, workbench image generation, and iterative image-generation templates can be overridden in the settings page.

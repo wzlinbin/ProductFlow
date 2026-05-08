@@ -43,6 +43,7 @@ from productflow_backend.infrastructure.storage import LocalStorage
 NODE_GROUP_TEMPLATE_COLLISION_NODE_WIDTH = 248
 NODE_GROUP_TEMPLATE_COLLISION_NODE_HEIGHT = 248
 NODE_GROUP_TEMPLATE_COLLISION_GAP = 32
+NODE_GROUP_TEMPLATE_CONTEXT_ANCHOR_GAP = 220
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,14 +78,23 @@ def _node_group_template_offsets(
     existing_nodes: list[WorkflowNode],
     position_x: int,
     position_y: int,
+    anchor_node: WorkflowNode | None = None,
 ) -> tuple[int, int]:
     min_x = min(node.position_x for node in template_nodes)
     min_y = min(node.position_y for node in template_nodes)
+    if anchor_node is not None:
+        # 节点组复用现有商品资料节点，新增节点从它右侧展开，避免回贴到画布左侧。
+        position_x = max(
+            position_x,
+            anchor_node.position_x + NODE_GROUP_TEMPLATE_COLLISION_NODE_WIDTH + NODE_GROUP_TEMPLATE_CONTEXT_ANCHOR_GAP,
+        )
+        position_y = max(position_y, anchor_node.position_y)
     position_x_offset = position_x - min_x
     position_y_offset = position_y - min_y
     existing_bounds = [_node_bounds(node.position_x, node.position_y) for node in existing_nodes]
 
     for _ in range(len(existing_bounds) + 1):
+        # 只向下平移到冲突节点底部，保留用户拖放的横向位置。
         template_bounds = [
             _node_bounds(node.position_x + position_x_offset, node.position_y + position_y_offset)
             for node in template_nodes
@@ -103,10 +113,16 @@ def _node_group_template_offsets(
     return position_x_offset, position_y_offset
 
 
+def _insertable_template_nodes(
+    template_nodes: tuple[CanvasTemplateNodeSpec, ...],
+) -> tuple[CanvasTemplateNodeSpec, ...]:
+    return tuple(node for node in template_nodes if node.node_type != WorkflowNodeType.PRODUCT_CONTEXT)
+
+
 def _single_product_context_node(workflow: ProductWorkflow) -> WorkflowNode:
     product_context_nodes = [node for node in workflow.nodes if node.node_type == WorkflowNodeType.PRODUCT_CONTEXT]
     if len(product_context_nodes) != 1:
-        raise BusinessValidationError("节点组模板需要当前画布中的商品资料节点")
+        raise BusinessValidationError("模板需要当前画布中的商品资料节点")
     return product_context_nodes[0]
 
 
@@ -217,22 +233,36 @@ def apply_node_group_template_to_workflow(
     position_y: int,
 ) -> ProductWorkflow:
     template = get_canvas_template(session, template_key.strip())
-    if template.kind != "node_group":
-        raise BusinessValidationError("画布内只能添加节点组模板，完整画布模板请在创建商品时选择")
     workflow = product_workflow_graph.get_active_workflow(session, product_id)
     if workflow is None:
         product_workflow_graph.get_product_or_raise(session, product_id)
-        raise BusinessValidationError("需要先创建或打开画布后才能添加节点组")
+        raise BusinessValidationError("需要先创建或打开画布后才能添加模板")
+    # 模板里的商品资料节点是占位符，落到已有画布时要映射到当前商品资料节点。
+    needs_product_context = any(
+        node.node_type == WorkflowNodeType.PRODUCT_CONTEXT
+        for node in template.nodes
+    ) or bool(template.default_external_connections)
+    product_context_node = _single_product_context_node(workflow) if needs_product_context else None
+    insertable_template_nodes = _insertable_template_nodes(template.nodes)
+    if not insertable_template_nodes:
+        raise BusinessValidationError("模板没有可添加到当前画布的节点")
+    existing_nodes_by_template_key = {
+        node.key: product_context_node
+        for node in template.nodes
+        if node.node_type == WorkflowNodeType.PRODUCT_CONTEXT
+        and product_context_node is not None
+    }
     external_source_nodes = (
-        {"existing_product_context": _single_product_context_node(workflow)}
-        if template.default_external_connections
+        {"existing_product_context": product_context_node}
+        if product_context_node is not None
         else {}
     )
     position_x_offset, position_y_offset = _node_group_template_offsets(
-        template_nodes=template.nodes,
+        template_nodes=insertable_template_nodes,
         existing_nodes=list(workflow.nodes),
         position_x=position_x,
         position_y=position_y,
+        anchor_node=product_context_node,
     )
     materialize_canvas_template_graph(
         session,
@@ -240,6 +270,7 @@ def apply_node_group_template_to_workflow(
         template=template,
         position_x_offset=position_x_offset,
         position_y_offset=position_y_offset,
+        existing_nodes_by_template_key=existing_nodes_by_template_key,
         external_source_nodes_by_template_source=external_source_nodes,
     )
     workflow.updated_at = now_utc()

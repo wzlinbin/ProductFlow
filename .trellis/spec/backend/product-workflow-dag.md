@@ -35,18 +35,28 @@
   `product_context`, `reference_image`, `copy_generation`, `image_generation`.
 - Built-in template keys:
   - `ecommerce-main-image-v1`
+  - `ecommerce-taobao-main-image-v1`
+  - `ecommerce-xiaohongshu-image-v1`
+  - `ecommerce-multi-angle-image-v1`
   - `ecommerce-sku-variant-image-v1`
+  - `ecommerce-feature-infographic-v1`
+  - `ecommerce-size-spec-image-v1`
+  - `ecommerce-scale-reference-image-v1`
+  - `ecommerce-package-checklist-image-v1`
+  - `ecommerce-usage-steps-image-v1`
+  - `ecommerce-comparison-image-v1`
   - `ecommerce-model-lifestyle-image-v1`
   - `ecommerce-scene-image-v1`
   - `ecommerce-detail-material-image-v1`
   - `ecommerce-campaign-promotion-image-v1`
+  - `ecommerce-short-video-cover-v1`
   - `ecommerce-white-background-image-v1`
 
 ### 3. Contracts
 
 - `CanvasTemplate.version` must be `1`.
-- `CanvasTemplate.kind` must be `full_canvas` for a complete canvas starter plan or `node_group` for a reusable group
-  that can be appended into an existing workflow.
+- `CanvasTemplate.kind` must be `full_canvas` for built-in ecommerce scenario templates. `node_group` remains valid for
+  user-saved reusable groups.
 - `CanvasTemplate.nodes` is required and every node `key` must be unique within the template.
 - Node specs are logical template nodes. Application code that materializes them must translate each node spec into a
   real `workflow_nodes` row and each edge spec into a real `workflow_edges` row.
@@ -59,6 +69,9 @@
   running downstream nodes.
 - `suggested_connections` may describe optional UI connection advice, but every suggestion must point to existing template
   node keys and must not connect a node to itself.
+- Built-in `full_canvas` templates may contain one `product_context` node. When such a template is appended inside an
+  existing product workbench, application code must reuse the active workflow's existing product-context singleton instead
+  of creating a second product node.
 - Built-in `node_group` templates may declare `default_external_connections` from `existing_product_context` to template
   copy/image node keys. Applying the template must materialize those declarations as normal visible `workflow_edges`.
   They are not hidden suggestions or frontend-only hints.
@@ -77,11 +90,13 @@
   `generated_poster_variant_ids`, `filled_source_asset_ids`, and image-session asset ids must be stripped while preserving
   reusable fields such as `role`, `label`, `instruction`, `size`, and normalized `tool_options`. Unknown config keys ending
   in `_id`, `_ids`, `_url`, or `_path` must be rejected so new artifact references do not silently enter templates.
-- Applying a user template must go through the same node-group application path as built-in templates and must create
+- Applying a user template must go through the same template application path as built-in templates and must create
   ordinary persisted workflow nodes and edges. Archived user templates must not appear in the catalog and must not be
   applicable by key.
-- Built-in templates must cover real ecommerce image-production scenarios: main image, SKU/variant, model/lifestyle,
-  scene, detail/material, campaign/promotion, and white-background output.
+- Built-in templates must cover real ecommerce image-production scenarios: marketplace/main image, Taobao main image,
+  Xiaohongshu/content cover, multi-angle gallery, SKU/variant, feature infographic, size/spec, scale reference,
+  package/checklist, usage steps, comparison, model/lifestyle, scene, detail/material, campaign/promotion,
+  short-video cover, and white-background output.
 - Templates must not introduce new workflow node types by enum drift. When a new `WorkflowNodeType` is added elsewhere,
   it becomes template-supported only after `SUPPORTED_CANVAS_TEMPLATE_NODE_TYPES` and template tests are updated on
   purpose.
@@ -125,8 +140,9 @@
 - Good: main-image template creates product context, copy generation, image generation, generated reference output, and a
   downstream iteration image/output pair. The iteration path remains a downstream DAG branch.
 - Good: campaign template contains campaign prompt defaults, poster image size, and an explicit generated output slot.
-- Good: node-group template appends a reusable group by materializing normal workflow nodes and remapping template keys to
-  database node IDs before creating edges.
+- Good: built-in scenario template appends reusable ecommerce production nodes by materializing normal workflow nodes,
+  reusing the active workflow product-context node for the template's `product` key, and remapping all other template keys
+  to database node IDs before creating edges.
 - Good: saving a selected copy/image/reference chain stores relative node positions and internal selected edges, appears in
   the template catalog with `source == "user"`, and applying `user:{id}` creates normal workflow rows with empty outputs.
 - Good: saving a reference node that has been filled with an image strips `source_asset_ids` and
@@ -143,8 +159,9 @@
 ### 6. Tests Required
 
 - Unit test every built-in template with `validate_canvas_template` and assert all built-ins have unique keys.
-- Unit test required ecommerce scenario coverage: main image, SKU/variant, model/lifestyle, scene, detail/material,
-  campaign/promotion, and white-background.
+- Unit test required ecommerce scenario coverage: marketplace/main image, Taobao main image, Xiaohongshu/content cover,
+  multi-angle gallery, SKU/variant, feature infographic, size/spec, scale reference, package/checklist, usage steps,
+  comparison, model/lifestyle, scene, detail/material, campaign/promotion, short-video cover, and white-background.
 - Unit test downstream iteration remains acyclic and includes only downstream template edges.
 - Unit test validation rejects missing edge references, self-edges, cycles, duplicate node keys, unsupported node types,
   invalid template kind, invalid output slot references, invalid suggested connections, and invalid default external
@@ -201,8 +218,8 @@ Keep the template as node and edge specs so application code can persist visible
 - Trigger: changes to `POST /api/products`, product creation use cases, or creation-time canvas template application.
 - Product creation may initialize a complete ecommerce output plan, but only by materializing a built-in `full_canvas`
   template into normal persisted workflow rows.
-- Creation-time template selection must not implement canvas-internal node-group insertion, user-saved template storage,
-  result actions, or material lineage. Those are separate product-workbench capabilities.
+- Creation-time template selection must not implement user-saved template storage, result actions, or material lineage.
+  Those are separate product-workbench capabilities.
 
 ### 2. Signatures
 
@@ -230,7 +247,8 @@ Keep the template as node and edge specs so application code can persist visible
 - Any other key must resolve through the built-in template catalog. Do not accept frontend-only template payloads or
   browser-local template definitions for product creation.
 - Only `CanvasTemplate.kind == "full_canvas"` is valid at product creation time.
-- Built-in `node_group` templates are appended to an existing canvas by later palette features, not by `POST /api/products`.
+- Built-in ecommerce templates are complete `full_canvas` templates. Product creation may materialize any built-in
+  ecommerce template directly.
 - `create_product` owns the SQLAlchemy transaction. Template materialization helpers may `flush` rows to resolve ids, but
   must not `commit` independently.
 - Materialized `WorkflowNode` rows copy template `node_type`, `title`, `position_x`, `position_y`, and `config_json`.
@@ -248,8 +266,8 @@ Keep the template as node and edge specs so application code can persist visible
 
 - `canvas_template_key` missing/blank/default alias -> create product, no eager workflow row.
 - Unknown non-default key -> `BusinessValidationError("画布模板不存在")` or equivalent template-missing `400`.
-- Built-in key whose template kind is `node_group` -> `BusinessValidationError` with a message explaining product creation
-  supports only complete canvas templates.
+- Built-in key whose template kind is not `full_canvas` -> `BusinessValidationError` with a message explaining product
+  creation supports only complete canvas templates.
 - Product id missing during materialization -> `NotFoundError("商品不存在")`.
 - Product already has an active workflow before materialization -> `BusinessValidationError("商品已有活动画布")`.
 
@@ -261,7 +279,7 @@ Keep the template as node and edge specs so application code can persist visible
   lazily creates the current default graph.
 - Base: frontend can label the key as a merchant-facing output plan such as `商品主图方案`; the submitted value remains the
   backend-recognized `canvas_template_key`.
-- Bad: accepting a `node_group` template in product creation and pretending it is a full-canvas starter.
+- Bad: accepting a user-saved `node_group` template in product creation and pretending it is a full-canvas starter.
 - Bad: creating a default workflow eagerly for blank/default key and changing current lazy behavior without an explicit
   product decision.
 - Bad: persisting only `canvas_template_key` on the product and letting the frontend draw non-persisted template nodes.
@@ -275,7 +293,7 @@ Keep the template as node and edge specs so application code can persist visible
 - Regression test layout-sensitive built-in templates, including the main-image output and downstream iteration node
   coordinates that the creation page preview mirrors.
 - API test unknown key returns `400` with template-missing detail.
-- API test built-in `node_group` key returns `400` with complete-canvas-only detail.
+- API test a broad built-in scenario key such as `ecommerce-sku-variant-image-v1` creates an active workflow immediately.
 - Regression test fetching the workflow after template-backed creation returns the existing active workflow id.
 
 ### 7. Wrong vs Correct
@@ -304,16 +322,16 @@ session.commit()
 
 Creation-time template application must persist the visible workflow graph in the same product creation transaction.
 
-## Scenario: Product workflow node-group template application
+## Scenario: Product workflow template application
 
 ### 1. Scope / Trigger
 
-- Trigger: changes to canvas-internal template insertion APIs, built-in `node_group` templates, or product workflow
+- Trigger: changes to canvas-internal template insertion APIs, built-in scenario templates, or product workflow
   mutation code that materializes template nodes.
-- The workbench may append built-in `node_group` templates to an existing active product workflow by creating normal
-  persisted workflow rows.
-- This scenario does not cover product-creation `full_canvas` selection, user-saved templates, drag-to-canvas authoring,
-  or hidden suggested external connections.
+- The workbench may append built-in `full_canvas` scenario templates to an existing active product workflow by creating
+  normal persisted workflow rows and reusing the active workflow's existing product-context node.
+- This scenario does not cover product-creation template selection, user-saved template authoring,
+  drag-to-canvas authoring, or hidden suggested external connections.
 
 ### 2. Signatures
 
@@ -330,53 +348,53 @@ Creation-time template application must persist the visible workflow graph in th
 - Application entrypoint:
   - `apply_node_group_template_to_workflow(session, product_id, template_key, position_x, position_y) -> ProductWorkflow`
 - Shared materialization helper:
-  - `materialize_canvas_template_graph(session, workflow, template, position_x_offset=0, position_y_offset=0)`
+  - `materialize_canvas_template_graph(..., existing_nodes_by_template_key=None, external_source_nodes_by_template_source=None)`
 
 ### 3. Contracts
 
-- The apply API resolves `template_key` through the built-in backend catalog only.
+- The apply API resolves `template_key` through the backend template catalog, including built-in scenario templates and
+  non-archived user templates.
 - Catalog summary responses must expose lightweight real graph preview data from `CanvasTemplate.nodes` and
   `CanvasTemplate.edges`. Include node key, type, title, and relative coordinates plus edge source/target keys; do not
   include large prompt seeds, instruction strings, or `config_json` in summary preview data.
-- Only `CanvasTemplate.kind == "node_group"` is valid for canvas-internal insertion.
-- `full_canvas` templates remain valid only for product creation.
-- Applying a node group appends to the product's active workflow and preserves all existing nodes and edges.
+- Built-in `full_canvas` scenario templates and user-saved `node_group` templates are both valid for canvas-internal
+  insertion.
+- Applying a template appends to the product's active workflow and preserves all existing nodes and edges.
+- If a template contains `product_context`, the apply path must map that template key to the active workflow's existing
+  product-context node and skip creating a duplicate product node.
 - Template node specs are materialized into real `workflow_nodes` rows by copying `node_type`, `title`, `config_json`, and
   relative layout.
-- The smallest template `position_x` / `position_y` becomes the anchor that lands at request `position_x` /
-  `position_y`; other template nodes keep their relative offsets.
-- Template edge specs are materialized as real `workflow_edges` rows only between nodes created in the same template
-  application.
+- The smallest insertable template `position_x` / `position_y` becomes the anchor that lands at request `position_x` /
+  `position_y`; other inserted template nodes keep their relative offsets.
+- Template edge specs are materialized as real `workflow_edges` rows after remapping template keys to either newly created
+  nodes or explicitly reused existing nodes such as the product-context singleton.
 - `suggested_connections` are returned by the catalog for UI guidance and must not be silently materialized as external
   workflow edges.
 - `default_external_connections` are returned by the catalog as lightweight metadata and are materialized by the apply API
-  as real visible `workflow_edges`. For built-in SKU/detail/white-background node groups, the existing active workflow
-  `product_context` node connects to the newly created `copy_generation` and `image_generation` nodes so the group can
-  inherit product fields and the product source image.
-- Built-in `node_group` templates should not contain a `product_context` node, because the active workflow already owns
-  the product-context singleton.
+  as real visible `workflow_edges` when a node-group template declares them.
+- Built-in scenario templates contain a `product_context` node in the template graph. The active workflow already owns
+  the product-context singleton, so insertion reuses it and still materializes the template's product-to-copy/image edges.
 
 ### 4. Validation & Error Matrix
 
 - Unknown `template_key` -> `400`, `{"detail": "画布模板不存在"}`.
-- `template_key` resolves to `full_canvas` -> `400`, detail explains that canvas insertion accepts node-group templates.
 - Missing product -> `404`, `{"detail": "商品不存在"}`.
 - Existing product without an active workflow -> `400`; the apply API must not create a workflow implicitly.
 - Active workflow without exactly one `product_context` node -> `400`; the apply API must not create a partially usable
-  node group.
+  scenario template.
 - Template self-edge, missing edge reference, or cycle -> `400` business validation error.
 - Any generated edge that would make the full active workflow cyclic -> rollback and return a `400` DAG validation error.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: applying `ecommerce-sku-variant-image-v1` to the default workflow increases node and edge counts, keeps all
-  previous node/edge IDs, adds template-internal edges, and adds visible external edges from the existing product context
-  to the new copy/image nodes.
+  previous node/edge IDs, does not create a second product-context node, and adds visible edges from the existing product
+  context to the template copy/image nodes.
 - Good: applying a template at `position_x=480`, `position_y=360` places the template's minimum coordinate there while
   preserving relative spacing.
 - Base: the UI may render reference input hints and connection suggestions from the catalog.
 - Bad: frontend creates local-only template nodes without calling the apply API.
-- Bad: applying a `full_canvas` template inside an existing canvas.
+- Bad: creating a second `product_context` node when applying a built-in scenario template inside an existing canvas.
 - Bad: materializing suggested external connections as hidden edges.
 
 ### 6. Tests Required
@@ -384,14 +402,13 @@ Creation-time template application must persist the visible workflow graph in th
 - API test catalog response includes built-in templates with `kind`, scenario metadata, output slots, reference input
   hints, suggested connections, lightweight default external connections, and real `preview_nodes` / `preview_edges`
   matching the built-in template definitions. Catalog summaries must not expose config/prompt payloads.
-- API test successful node-group apply preserves existing nodes and edges.
+- API test successful template apply preserves existing nodes and edges.
 - API test persisted node count, edge count, node types, titles, config, and shifted positions match the backend template.
-- API test created edges connect only newly created template nodes and no self-edge is created.
-- API test default external connections persist visible edges from the existing product context node to the new
-  copy/image nodes.
-- API test missing product-context node returns `400` and does not create a partial node group.
+- API test created edges are the template edges remapped to newly created nodes plus the existing product-context node,
+  and no self-edge is created.
+- API test built-in full-canvas insertion reuses the existing product-context node.
+- API test missing product-context node returns `400` and does not create a partial template.
 - API test unknown key returns `400` with template-missing detail.
-- API test `full_canvas` key returns `400` with node-group-only detail.
 
 ### 7. Wrong vs Correct
 
@@ -728,10 +745,14 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
   - `CopyPayload.title`
   - `CopyPayload.poster_headline`
   - `CopyPayload.cta`
-- Fields whose contract is already a list must remain lists and must not be flattened:
+- Fields whose contract is already a list must remain lists and must not be flattened into one scalar:
   - `CreativeBriefPayload.selling_angles`
   - `CreativeBriefPayload.taboo_phrases`
   - `CopyPayload.selling_points`
+- `CopyPayload.selling_points` may accept provider items shaped with a short label field (`tag`, `label`, `title`, or
+  `name`) plus a body field (`text`, `content`, `description`, or `copy`). The contract normalizes each item to one
+  editable text row formatted as `label：body` before persistence so existing poster/image/frontend consumers keep a
+  stable `list[str]`.
 - Normalization belongs in the application contract layer, before persistence and workflow output construction. Do not
   make frontend DTOs accept `string | string[]` for these fields.
 
@@ -743,7 +764,9 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
 - Scalar field list contains an empty/blank string -> Pydantic `ValidationError`.
 - Scalar field list contains an object, number, boolean, or `null` -> Pydantic `ValidationError`; do not coerce with
   `str(...)`.
-- List-contract field is not a list or violates min/max length -> Pydantic `ValidationError`.
+- `CopyPayload.selling_points` structured item misses a label field, misses a body field, contains blank text, or contains
+  non-text nested values -> Pydantic `ValidationError`.
+- Other list-contract fields are not lists or violate min/max length -> Pydantic `ValidationError`.
 
 ### 5. Good/Base/Bad Cases
 
@@ -751,6 +774,8 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
   `"摄影入门用户、图文内容创作者"`.
 - Good: provider returns `{"title": ["轻巧入门", "随拍即出片"]}`; `CopySet.title` and copy-node output use
   `"轻巧入门、随拍即出片"`.
+- Good: provider returns `{"selling_points": [{"label": "信息清晰", "text": "规格价格一眼可见"}]}` plus enough valid
+  items; `CopySet.selling_points` uses `["信息清晰：规格价格一眼可见", ...]`.
 - Base: provider returns scalar strings for all scalar fields; values pass through unchanged.
 - Bad: provider returns `{"audience": []}` or `{"audience": [{"name": "摄影入门用户"}]}`; validation fails instead of
   inventing a display string.
@@ -759,8 +784,12 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
 
 - Contract regression directly validates `CreativeBriefPayload` and `CopyPayload` with scalar text arrays and malformed
   arrays; assert good arrays are joined with `、` and bad arrays raise `ValidationError`.
+- Contract regression directly validates `CopyPayload.selling_points` with structured labeled text items and malformed
+  structured items.
 - Copy-generation workflow regression monkeypatches the text provider to return scalar arrays and asserts the persisted
   `CreativeBrief.payload` and `CopySet` fields are strings.
+- Copy-generation workflow regression monkeypatches the text provider to return structured selling points and asserts the
+  copy-node `output_json` and `CopySet.selling_points` expose normalized string rows.
 - Product workflow DAG regression runs `POST /api/products/{product_id}/workflow/run` with provider scalar arrays and
   asserts copy-node `output_json` and product `latest_brief.payload` expose normalized strings.
 

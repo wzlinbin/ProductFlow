@@ -157,8 +157,8 @@
 ### Templates Sidebar Tab
 
 - Built-in canvas templates are loaded through `api.listCanvasTemplates()` from `GET /api/workflow/canvas-templates`;
-  ProductDetail should filter and display only `kind === "node_group"` for workbench insertion.
-- ProductDetail must present node-group templates inside the inspector sidebar as a `templates` tab with the same rail
+  ProductDetail should display built-in scenario templates and non-archived user templates for workbench insertion.
+- ProductDetail must present templates inside the inspector sidebar as a `templates` tab with the same rail
   behavior as Details, Runs, and Images. Do not open a canvas floating palette for templates.
 - The collapsed sidebar rail must include a Templates tab entry; clicking it expands the sidebar and switches to the
   Templates tab.
@@ -172,7 +172,7 @@
   backend `CanvasTemplate.nodes` and `CanvasTemplate.edges`. Use the provided relative coordinates to fit the graph into
   the sidebar card as a real mini-map. Do not hard-code a generic template structure in the frontend, and show a short
   empty state when preview data is absent.
-- Template card mini-maps must remain readable for the built-in four-node groups: node rectangles must not overlap, edge
+- Template card mini-maps must remain readable for built-in scenario templates: node rectangles must not overlap, edge
   paths should render behind nodes with enough visible space between columns, and the preview can increase height or use
   a normalized column layout while still deriving nodes/edges from the backend summary.
 - Template cards should display backend `default_external_connections` as short chips such as `自动接商品`. These chips
@@ -188,8 +188,9 @@
   `["canvas-templates"]`; UI text may say delete, but the backend operation is archival.
 - Renaming a user template calls `api.updateUserTemplateGroup(user_template_id, { title })` and invalidates
   `["canvas-templates"]`. The first UI contract only edits the title; description editing can stay out of the card flow.
-- Applying a built-in node group calls `api.applyWorkflowTemplateGroup(productId, { template_key, position_x,
-  position_y })` and receives the normal `ProductWorkflow` response.
+- Applying a built-in scenario template calls `api.applyWorkflowTemplateGroup(productId, { template_key, position_x,
+  position_y })` and receives the normal `ProductWorkflow` response. Built-in full-canvas templates reuse the active
+  workflow's existing product node instead of creating a second product node.
 - Applying a user node-group template uses the same API with `template_key === "user:{id}"`; the frontend must not special
   case materialization locally.
 - Use the current viewport-center node position for the insertion point unless a more explicit user-selected canvas
@@ -199,7 +200,7 @@
   the user can immediately edit, connect, drag, or run it.
 - Display `reference_input_hints`, `output_slots`, and `suggested_connections` as guidance only. Suggested connections
   must not become hidden external edges; every real edge in the canvas should come from the backend workflow payload.
-- When a node-group template declares default external connections, adding it should result in visible backend-returned
+- When a user or legacy node-group template declares default external connections, adding it should result in visible backend-returned
   workflow edges, for example from the existing product context node to newly created copy/image nodes. The frontend must
   render those edges from the normal workflow payload rather than from local template metadata.
 - Do not duplicate the backend template catalog in ProductDetail. The page may use merchant-facing labels from the API,

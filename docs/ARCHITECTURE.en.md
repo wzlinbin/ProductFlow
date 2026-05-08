@@ -92,8 +92,8 @@ ProductWorkflow
 Canvas template chain:
 
 ```text
-CanvasTemplate(builtin full_canvas/node_group)
-  -> product creation or workflow node group insertion
+CanvasTemplate(builtin full_canvas)
+  -> product creation or workflow template insertion
 
 UserCanvasTemplate(node_group)
   -> reusable selected workflow nodes and internal edges
@@ -110,8 +110,10 @@ Workflow node semantics for users:
 
 Canvas template boundaries:
 
-- `full_canvas` templates are only used to initialize a complete workflow during product creation.
-- `node_group` templates are only inserted into existing product workbenches and cannot contain `product_context` nodes.
+- Built-in `full_canvas` scenario templates can initialize a complete workflow during product creation and can also be
+  inserted into an existing product workbench.
+- When a built-in scenario template is inserted into an existing workbench, the template `product_context` node is mapped
+  to the active workflow's existing product node instead of creating a second product node.
 - User node-group templates are saved from selected nodes and persist only reusable configuration plus internal edges between selected nodes; they do not store product details, generated images, or copy outputs.
 
 ## 5. Async Jobs and Recovery

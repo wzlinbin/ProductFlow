@@ -79,14 +79,84 @@ def test_builtin_canvas_template_catalog_covers_required_ecommerce_scenarios() -
     assert len({template.key for template in templates}) == len(templates)
     assert {template.scenario.scenario for template in templates} >= {
         CanvasTemplateScenario.MAIN_IMAGE,
+        CanvasTemplateScenario.TAOBAO_MAIN_IMAGE,
+        CanvasTemplateScenario.XIAOHONGSHU_IMAGE,
+        CanvasTemplateScenario.MULTI_ANGLE,
         CanvasTemplateScenario.SKU_VARIANT,
+        CanvasTemplateScenario.FEATURE_INFOGRAPHIC,
+        CanvasTemplateScenario.SIZE_SPEC,
+        CanvasTemplateScenario.SCALE_REFERENCE,
+        CanvasTemplateScenario.PACKAGE_CHECKLIST,
+        CanvasTemplateScenario.USAGE_STEPS,
+        CanvasTemplateScenario.COMPARISON,
         CanvasTemplateScenario.MODEL_LIFESTYLE,
         CanvasTemplateScenario.SCENE_IMAGE,
         CanvasTemplateScenario.DETAIL_MATERIAL,
         CanvasTemplateScenario.CAMPAIGN_PROMOTION,
+        CanvasTemplateScenario.SHORT_VIDEO_COVER,
         CanvasTemplateScenario.WHITE_BACKGROUND,
     }
-    assert {template.kind for template in templates} == {"full_canvas", "node_group"}
+    assert {template.kind for template in templates} == {"full_canvas"}
+
+
+def test_builtin_canvas_template_catalog_documents_02_shipped_scenarios() -> None:
+    templates = list_builtin_canvas_templates()
+    scenarios_by_key = {template.key: template.scenario.scenario for template in templates}
+
+    assert scenarios_by_key == {
+        "ecommerce-main-image-v1": CanvasTemplateScenario.MAIN_IMAGE,
+        "ecommerce-taobao-main-image-v1": CanvasTemplateScenario.TAOBAO_MAIN_IMAGE,
+        "ecommerce-xiaohongshu-image-v1": CanvasTemplateScenario.XIAOHONGSHU_IMAGE,
+        "ecommerce-multi-angle-image-v1": CanvasTemplateScenario.MULTI_ANGLE,
+        "ecommerce-sku-variant-image-v1": CanvasTemplateScenario.SKU_VARIANT,
+        "ecommerce-feature-infographic-v1": CanvasTemplateScenario.FEATURE_INFOGRAPHIC,
+        "ecommerce-size-spec-image-v1": CanvasTemplateScenario.SIZE_SPEC,
+        "ecommerce-scale-reference-image-v1": CanvasTemplateScenario.SCALE_REFERENCE,
+        "ecommerce-package-checklist-image-v1": CanvasTemplateScenario.PACKAGE_CHECKLIST,
+        "ecommerce-usage-steps-image-v1": CanvasTemplateScenario.USAGE_STEPS,
+        "ecommerce-comparison-image-v1": CanvasTemplateScenario.COMPARISON,
+        "ecommerce-model-lifestyle-image-v1": CanvasTemplateScenario.MODEL_LIFESTYLE,
+        "ecommerce-scene-image-v1": CanvasTemplateScenario.SCENE_IMAGE,
+        "ecommerce-detail-material-image-v1": CanvasTemplateScenario.DETAIL_MATERIAL,
+        "ecommerce-campaign-promotion-image-v1": CanvasTemplateScenario.CAMPAIGN_PROMOTION,
+        "ecommerce-short-video-cover-v1": CanvasTemplateScenario.SHORT_VIDEO_COVER,
+        "ecommerce-white-background-image-v1": CanvasTemplateScenario.WHITE_BACKGROUND,
+    }
+
+
+def test_full_canvas_templates_have_distinct_graph_shapes() -> None:
+    templates = {
+        template.key: template
+        for template in list_builtin_canvas_templates()
+        if template.kind == "full_canvas"
+    }
+
+    graph_shapes = {
+        key: (
+            len(template.nodes),
+            len(template.edges),
+            len(template.output_slots),
+            len(template.reference_input_hints),
+            tuple(sorted((node.node_type.value, node.position_x, node.position_y) for node in template.nodes)),
+        )
+        for key, template in templates.items()
+    }
+
+    assert len(set(graph_shapes.values())) == len(graph_shapes)
+    assert len(templates["ecommerce-taobao-main-image-v1"].output_slots) == 2
+    assert len(templates["ecommerce-xiaohongshu-image-v1"].output_slots) == 2
+    assert len(templates["ecommerce-multi-angle-image-v1"].output_slots) == 3
+    assert len(templates["ecommerce-model-lifestyle-image-v1"].output_slots) == 2
+    assert len(templates["ecommerce-short-video-cover-v1"].output_slots) == 2
+    assert any(
+        node.node_type == WorkflowNodeType.REFERENCE_IMAGE
+        for node in templates["ecommerce-xiaohongshu-image-v1"].nodes
+    )
+    assert any(
+        node.node_type == WorkflowNodeType.COPY_GENERATION and node.key == "visual_copy"
+        for node in templates["ecommerce-campaign-promotion-image-v1"].nodes
+    )
+    assert all(template.kind == "full_canvas" for template in templates.values())
 
 
 def test_builtin_canvas_templates_satisfy_v1_contract() -> None:
@@ -96,6 +166,11 @@ def test_builtin_canvas_templates_satisfy_v1_contract() -> None:
         assert template.prompt_seeds
         assert template.instruction_seeds
         assert template.output_slots
+        assert template.title.strip()
+        assert template.description.strip()
+        assert template.scenario.title.strip()
+        assert template.scenario.description.strip()
+        assert all("DAG" not in value for value in (template.title, template.description, template.scenario.title))
         assert all(node.node_type in SUPPORTED_CANVAS_TEMPLATE_NODE_TYPES for node in template.nodes)
         assert all(
             node.config_json.get("instruction") == node.instruction_seed
@@ -119,27 +194,31 @@ def test_builtin_canvas_templates_satisfy_v1_contract() -> None:
             assert edge.target_node_key in nodes_by_key
 
 
-def test_builtin_node_group_templates_keep_readable_horizontal_spacing() -> None:
+def test_builtin_canvas_templates_keep_readable_horizontal_progression() -> None:
     for template in list_builtin_canvas_templates():
-        if template.kind != "node_group":
-            continue
-        nodes = sorted(template.nodes, key=lambda node: node.position_x)
+        nodes = tuple(node for node in template.nodes if node.node_type != WorkflowNodeType.PRODUCT_CONTEXT)
+        sorted_unique_x = sorted({node.position_x for node in template.nodes})
 
-        assert all(
-            next_node.position_x - current_node.position_x >= 400
-            for current_node, next_node in zip(nodes, nodes[1:], strict=False)
-        )
+        assert nodes
+        assert max(node.position_x for node in nodes) - min(node.position_x for node in nodes) >= 600
+        assert all((right - left) >= 380 for left, right in zip(sorted_unique_x, sorted_unique_x[1:], strict=False))
+        assert any(node.node_type == WorkflowNodeType.IMAGE_GENERATION for node in nodes)
+        assert any(node.node_type == WorkflowNodeType.REFERENCE_IMAGE for node in nodes)
 
 
 def test_builtin_catalog_expresses_dag_safe_downstream_iteration() -> None:
     main_template = get_builtin_canvas_template("ecommerce-main-image-v1")
+    output_node_keys = {slot.node_key for slot in main_template.output_slots}
+    nodes_by_key = {node.key: node for node in main_template.nodes}
 
     assert any(
-        edge.source_node_key == "output" and edge.target_node_key == "iteration_image"
+        edge.source_node_key in output_node_keys
+        and nodes_by_key[edge.target_node_key].node_type == WorkflowNodeType.IMAGE_GENERATION
         for edge in main_template.edges
     )
     assert any(
-        edge.source_node_key == "iteration_image" and edge.target_node_key == "iteration_output"
+        nodes_by_key[edge.source_node_key].node_type == WorkflowNodeType.IMAGE_GENERATION
+        and edge.target_node_key in output_node_keys
         for edge in main_template.edges
     )
     assert all(edge.source_node_key != edge.target_node_key for edge in main_template.edges)

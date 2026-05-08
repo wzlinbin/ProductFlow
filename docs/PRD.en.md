@@ -43,7 +43,7 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 
 1. Open the workflow workbench in the product detail page.
 2. Create or adjust nodes: product context, reference image, copy generation, and image generation.
-3. Use built-in node-group templates to append common flows, or multi-select nodes and save them as user node-group templates.
+3. Use built-in scenario templates to append common flows, or multi-select nodes and save them as user templates.
 4. Connect nodes to form a DAG.
 5. Start a background workflow run, then cancel running work or retry failed runs when needed.
 6. Persist run state, node state, and failure reasons in the database.
@@ -72,7 +72,7 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 - `ImageSessionRound` / `ImageSessionGenerationTask`: iterative image candidates and durable async generation-task state.
 - `ImageGalleryEntry`: saved generated-image collection record.
 - `ProductWorkflow` / `WorkflowNode` / `WorkflowEdge` / `WorkflowRun`: product DAG workflow structure and run records.
-- `CanvasTemplate` / `UserCanvasTemplate`: built-in full-canvas templates, built-in node-group templates, and user-saved node-group templates.
+- `CanvasTemplate` / `UserCanvasTemplate`: built-in full scenario templates and user-saved node-group templates.
 - `AppSetting`: runtime business configuration override.
 
 ## 5. Current Pages
@@ -96,7 +96,7 @@ For a single self-hosted deployment, the current version should be able to:
 2. Store products, assets, copy, posters, tasks, image sessions, and workflow state in PostgreSQL.
 3. Use Redis + Dramatiq to execute async copy/poster jobs and product workflows.
 4. Use durable `ImageSessionGenerationTask` records for iterative image generation, including queue position, failure reason, and completion refresh.
-5. Create products with full-canvas templates and insert built-in or user-saved node-group templates in the workbench.
+5. Create products with full scenario templates and insert the same built-in scenario templates or user-saved node-group templates in the workbench.
 6. Display task state, workflow node state, generation queue overview, failure reasons, and history in the frontend.
 7. Refresh running tasks/workflows through lightweight status APIs instead of high-frequency full-object polling.
 8. Retry recoverable iterative image tasks and product workflow runs, and cancel running tasks.

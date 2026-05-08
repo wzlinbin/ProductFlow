@@ -70,11 +70,14 @@ def materialize_canvas_template_graph(
     template: CanvasTemplate,
     position_x_offset: int = 0,
     position_y_offset: int = 0,
+    existing_nodes_by_template_key: dict[str, WorkflowNode] | None = None,
     external_source_nodes_by_template_source: dict[str, WorkflowNode] | None = None,
 ) -> dict[str, WorkflowNode]:
     validate_canvas_template(template)
-    nodes_by_template_key: dict[str, WorkflowNode] = {}
+    nodes_by_template_key: dict[str, WorkflowNode] = dict(existing_nodes_by_template_key or {})
     for node_spec in template.nodes:
+        if node_spec.key in nodes_by_template_key:
+            continue
         node = WorkflowNode(
             workflow_id=workflow.id,
             node_type=node_spec.node_type,

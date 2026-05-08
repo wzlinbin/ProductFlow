@@ -1,4 +1,6 @@
 import {
+  ChevronDown,
+  ChevronRight,
   FileText,
   ImageIcon,
   ImagePlus,
@@ -8,7 +10,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { CanvasTemplateSummary } from "../../lib/types";
 import { NODE_LABELS } from "./constants";
@@ -19,6 +21,18 @@ const PREVIEW_PADDING_X = 22;
 const PREVIEW_PADDING_Y = 22;
 const PREVIEW_NODE_WIDTH = 76;
 const PREVIEW_NODE_HEIGHT = 50;
+
+const TEMPLATE_CATEGORY_ORDER = [
+  { key: "all", label: "全部" },
+  { key: "listing", label: "平台首图" },
+  { key: "detail", label: "详情说服" },
+  { key: "gallery", label: "场景图册" },
+  { key: "content", label: "内容种草" },
+  { key: "campaign", label: "活动投放" },
+  { key: "custom", label: "自定义" },
+] as const;
+
+type TemplateCategoryKey = (typeof TEMPLATE_CATEGORY_ORDER)[number]["key"];
 
 interface TemplateGroupsPanelProps {
   templates: CanvasTemplateSummary[];
@@ -52,11 +66,40 @@ function summarizeReferenceInput(template: CanvasTemplateSummary): string | null
 }
 
 function summarizeScenario(template: CanvasTemplateSummary): string {
-  return template.scenario.title || template.scenario.tags[0] || "节点组";
+  return template.scenario.title || template.scenario.tags[0] || "模板";
 }
 
 function externalConnectionLabels(template: CanvasTemplateSummary): string[] {
   return Array.from(new Set(template.default_external_connections.map((connection) => connection.label).filter(Boolean)));
+}
+
+function templateCategoryKey(template: CanvasTemplateSummary): TemplateCategoryKey {
+  if (template.source === "user") {
+    return "custom";
+  }
+  const stage = template.scenario.ecommerce_stage;
+  if (
+    stage === "listing"
+    || stage === "detail"
+    || stage === "gallery"
+    || stage === "content"
+    || stage === "campaign"
+  ) {
+    return stage;
+  }
+  return "detail";
+}
+
+function templateCategoryCounts(templates: CanvasTemplateSummary[]): Record<TemplateCategoryKey, number> {
+  const counts = Object.fromEntries(TEMPLATE_CATEGORY_ORDER.map((category) => [category.key, 0])) as Record<
+    TemplateCategoryKey,
+    number
+  >;
+  counts.all = templates.length;
+  for (const template of templates) {
+    counts[templateCategoryKey(template)] += 1;
+  }
+  return counts;
 }
 
 type PreviewNode = CanvasTemplateSummary["preview_nodes"][number] & {
@@ -77,6 +120,7 @@ function buildTemplatePreviewLayout(template: CanvasTemplateSummary): TemplatePr
     return null;
   }
 
+  // 小卡片预览只保留列关系，不按真实画布宽度缩放，避免多列模板被压扁。
   const sortedUniqueX = Array.from(new Set(nodes.map((node) => node.position_x))).sort((a, b) => a - b);
   const minY = Math.min(...nodes.map((node) => node.position_y));
   const maxY = Math.max(...nodes.map((node) => node.position_y));
@@ -275,6 +319,26 @@ export function TemplateGroupsPanel({
 }: TemplateGroupsPanelProps) {
   const [editingTemplateKey, setEditingTemplateKey] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [activeCategory, setActiveCategory] = useState<TemplateCategoryKey>("all");
+  const [expandedTemplateKey, setExpandedTemplateKey] = useState<string | null>(templates[0]?.key ?? null);
+
+  useEffect(() => {
+    if (!templates.length) {
+      setExpandedTemplateKey(null);
+      return;
+    }
+    const expandedTemplateStillVisible = templates.some(
+      (template) =>
+        template.key === expandedTemplateKey
+        && (activeCategory === "all" || templateCategoryKey(template) === activeCategory),
+    );
+    if (!expandedTemplateStillVisible) {
+      const nextTemplate = templates.find(
+        (template) => activeCategory === "all" || templateCategoryKey(template) === activeCategory,
+      );
+      setExpandedTemplateKey(nextTemplate?.key ?? null);
+    }
+  }, [activeCategory, expandedTemplateKey, templates]);
 
   if (isLoading) {
     return (
@@ -295,28 +359,79 @@ export function TemplateGroupsPanel({
   if (!templates.length) {
     return (
       <div className="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-6 text-center text-xs text-zinc-500">
-        暂无节点组模板
+        暂无模板
       </div>
     );
   }
 
+  const categoryCounts = templateCategoryCounts(templates);
+  const visibleTemplates = templates.filter(
+    (template) => activeCategory === "all" || templateCategoryKey(template) === activeCategory,
+  );
+
   return (
     <section className="space-y-3">
-      {templates.map((template) => {
+      <div className="flex gap-1 overflow-x-auto border-b border-zinc-100 pb-2">
+        {TEMPLATE_CATEGORY_ORDER.filter((category) => category.key === "all" || categoryCounts[category.key] > 0).map(
+          (category) => {
+            const active = activeCategory === category.key;
+            return (
+              <button
+                key={category.key}
+                type="button"
+                onClick={() => {
+                  setActiveCategory(category.key);
+                  const nextTemplate = templates.find(
+                    (template) => category.key === "all" || templateCategoryKey(template) === category.key,
+                  );
+                  setExpandedTemplateKey(nextTemplate?.key ?? null);
+                }}
+                className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                  active
+                    ? "border-zinc-950 bg-zinc-950 text-white"
+                    : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+                }`}
+              >
+                {category.label}
+                <span className={active ? "ml-1 text-zinc-300" : "ml-1 text-zinc-400"}>
+                  {categoryCounts[category.key]}
+                </span>
+              </button>
+            );
+          },
+        )}
+      </div>
+
+      {visibleTemplates.length ? null : (
+        <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-6 text-center text-xs text-zinc-500">
+          当前分类暂无模板
+        </div>
+      )}
+
+      <div className="space-y-2">
+      {visibleTemplates.map((template) => {
         const templateBusy = applyBusy && applyingTemplateKey === template.key;
         const referenceLabel = summarizeReferenceInput(template);
         const externalLabels = externalConnectionLabels(template);
         const isUserTemplate = template.source === "user" && Boolean(template.user_template_id);
         const editing = editingTemplateKey === template.key;
+        const expanded = expandedTemplateKey === template.key;
         return (
           <article
             key={template.key}
             className="group overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-colors hover:border-zinc-300"
           >
-            <TemplateGraphPreview template={template} />
-
-            <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-3 py-2.5">
-              <div className="min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2 px-2.5 py-2">
+              <button
+                type="button"
+                onClick={() => setExpandedTemplateKey(expanded ? null : template.key)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+                aria-label={expanded ? "收起模板预览" : "展开模板预览"}
+                title={expanded ? "收起模板预览" : "展开模板预览"}
+              >
+                {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+              </button>
+              <div className="min-w-0 flex-1 space-y-1.5 text-left">
                 <div className="flex min-w-0 items-center gap-2">
                   <h3 className="truncate text-sm font-semibold text-zinc-950">
                     {template.title}
@@ -327,6 +442,11 @@ export function TemplateGroupsPanel({
                   <span className="shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
                     {isUserTemplate ? "自定义" : "内置"}
                   </span>
+                  {template.kind === "full_canvas" ? (
+                    <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                      自动接商品
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <span className="max-w-[8.5rem] truncate rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
@@ -390,6 +510,11 @@ export function TemplateGroupsPanel({
                 </button>
               </div>
             </div>
+            {expanded ? (
+              <div className="border-t border-zinc-100">
+                <TemplateGraphPreview template={template} />
+              </div>
+            ) : null}
             {editing ? (
               <form
                 className="flex items-center gap-2 border-t border-zinc-100 px-3 py-2"
@@ -428,6 +553,7 @@ export function TemplateGroupsPanel({
           </article>
         );
       })}
+      </div>
     </section>
   );
 }

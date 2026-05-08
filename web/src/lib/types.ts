@@ -14,11 +14,21 @@ export type WorkflowRunStatus = "running" | "succeeded" | "failed" | "cancelled"
 export type CanvasTemplateKind = "full_canvas" | "node_group";
 export type CanvasTemplateScenario =
   | "main_image"
+  | "taobao_main_image"
+  | "xiaohongshu_image"
+  | "multi_angle"
   | "sku_variant"
+  | "feature_infographic"
+  | "size_spec"
+  | "scale_reference"
+  | "package_checklist"
+  | "usage_steps"
+  | "comparison"
   | "model_lifestyle"
   | "scene_image"
   | "detail_material"
   | "campaign_promotion"
+  | "short_video_cover"
   | "white_background";
 
 export interface SessionState {
@@ -303,6 +313,7 @@ export interface CanvasTemplatePreviewNode {
   title: string;
   position_x: number;
   position_y: number;
+  size: string | null;
 }
 
 export interface CanvasTemplatePreviewEdge {

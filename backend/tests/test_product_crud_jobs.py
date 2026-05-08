@@ -24,7 +24,6 @@ from productflow_backend.domain.enums import (
     PosterKind,
     ProductWorkflowState,
     SourceAssetKind,
-    WorkflowNodeType,
 )
 from productflow_backend.infrastructure.db.models import (
     CopySet,
@@ -170,23 +169,6 @@ def test_product_create_materializes_full_canvas_template(configured_env: Path, 
         for edge in template.edges
     }
 
-    materialized_nodes_by_key = {
-        template_key: db_session.get(WorkflowNode, node_id)
-        for template_key, node_id in persisted_node_ids_by_template_key.items()
-    }
-    assert {
-        key: (node.node_type, node.position_x, node.position_y)
-        for key, node in materialized_nodes_by_key.items()
-        if node is not None
-    } == {
-        "product": (WorkflowNodeType.PRODUCT_CONTEXT, 48, 120),
-        "copy": (WorkflowNodeType.COPY_GENERATION, 320, 80),
-        "image": (WorkflowNodeType.IMAGE_GENERATION, 640, 112),
-        "output": (WorkflowNodeType.REFERENCE_IMAGE, 960, 66),
-        "iteration_image": (WorkflowNodeType.IMAGE_GENERATION, 1280, 188),
-        "iteration_output": (WorkflowNodeType.REFERENCE_IMAGE, 1600, 188),
-    }
-
     workflow_response = client.get(f"/api/products/{product_id}/workflow")
     assert workflow_response.status_code == 200
     assert workflow_response.json()["id"] == workflow.id
@@ -209,21 +191,27 @@ def test_product_create_rejects_invalid_canvas_template_key(configured_env: Path
     assert "画布模板不存在" in response.json()["detail"]
 
 
-def test_product_create_rejects_node_group_canvas_template_key(configured_env: Path) -> None:
+def test_product_create_accepts_broad_builtin_canvas_template_key(configured_env: Path, db_session) -> None:
     from productflow_backend.presentation.api import create_app
 
+    template = get_builtin_canvas_template("ecommerce-sku-variant-image-v1")
     app = create_app()
     client = TestClient(app)
     _login(client)
 
     response = client.post(
         "/api/products",
-        data={"name": "节点组模板商品", "canvas_template_key": "ecommerce-sku-variant-image-v1"},
-        files={"image": ("node-group.png", _make_demo_image_bytes(), "image/png")},
+        data={"name": "规格模板商品", "canvas_template_key": template.key},
+        files={"image": ("sku-template.png", _make_demo_image_bytes(), "image/png")},
     )
 
-    assert response.status_code == 400
-    assert "只支持完整画布模板" in response.json()["detail"]
+    assert response.status_code == 201
+    product_id = response.json()["id"]
+    db_session.expire_all()
+    workflow = db_session.query(ProductWorkflow).filter_by(product_id=product_id, active=True).one()
+    assert workflow.title == template.title
+    assert db_session.query(WorkflowNode).filter_by(workflow_id=workflow.id).count() == len(template.nodes)
+    assert db_session.query(WorkflowEdge).filter_by(workflow_id=workflow.id).count() == len(template.edges)
 
 
 def test_legacy_jobrun_routes_are_removed(configured_env: Path) -> None:
