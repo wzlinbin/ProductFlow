@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 from fastapi import HTTPException
-from helpers import _make_demo_image_bytes
+from fastapi.testclient import TestClient
+from helpers import _login, _make_demo_image_bytes
 
 from productflow_backend.application.image_sessions import create_image_session, submit_image_session_generation_task
 from productflow_backend.application.product_workflow import graph as product_workflow_graph
@@ -12,9 +13,12 @@ from productflow_backend.application.product_workflow.mutations import (
     create_workflow_node,
     get_or_create_product_workflow,
 )
-from productflow_backend.application.use_cases import create_product
+from productflow_backend.application.use_cases import create_product, update_copy_set
 from productflow_backend.domain.enums import WorkflowNodeType
 from productflow_backend.domain.errors import BusinessError, BusinessValidationError, NotFoundError
+from productflow_backend.infrastructure.db.models import CopySet
+from productflow_backend.infrastructure.logging import current_log_context
+from productflow_backend.presentation.api import create_app
 from productflow_backend.presentation.errors import raise_value_error_as_http
 
 
@@ -63,6 +67,38 @@ def test_legacy_value_error_fallback_remains_compatible() -> None:
     assert poster_file_missing.detail == "海报文件不存在"
     assert generic.status_code == 400
     assert generic.detail == "普通业务错误"
+
+
+def test_global_business_error_handler_preserves_detail_shape(configured_env) -> None:  # noqa: ARG001
+    app = create_app()
+    assert BusinessError in app.exception_handlers
+    assert ValueError not in app.exception_handlers
+    assert Exception not in app.exception_handlers
+
+    @app.get("/typed-not-found")
+    def typed_not_found() -> None:
+        assert current_log_context()["request_id"] == "typed-request-1"
+        raise NotFoundError("资源已移除")
+
+    client = TestClient(app)
+    response = client.get("/typed-not-found", headers={"X-Request-ID": "typed-request-1"})
+
+    assert response.status_code == 404
+    assert response.headers["X-Request-ID"] == "typed-request-1"
+    assert response.json() == {"detail": "资源已移除"}
+    assert "code" not in response.json()
+    assert current_log_context()["request_id"] == "-"
+
+
+def test_product_workflow_route_uses_global_business_error_handler(configured_env) -> None:  # noqa: ARG001
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+
+    response = client.get("/api/products/missing-product/workflow")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "商品不存在"}
 
 
 def test_high_risk_business_paths_raise_typed_validation_errors(db_session, configured_env) -> None:  # noqa: ARG001
@@ -137,6 +173,40 @@ def test_high_risk_business_paths_raise_typed_validation_errors(db_session, conf
 
     with pytest.raises(BusinessValidationError, match="生图节点包含不支持的图片类型"):
         poster_kind_from_config({"poster_kind": "invalid"})
+
+
+def test_update_copy_set_payload_validation_uses_typed_business_error(db_session, configured_env) -> None:  # noqa: ARG001
+    product = create_product(
+        db_session,
+        name="bad copy payload 商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="bad-copy-payload.png",
+        content_type="image/png",
+    )
+    copy_set = CopySet(
+        product_id=product.id,
+        structured_payload={
+            "version": 2,
+            "summary": "旧文案",
+            "content": {"kind": "freeform", "text": "旧内容"},
+        },
+        model_structured_payload={
+            "version": 2,
+            "summary": "旧文案",
+            "content": {"kind": "freeform", "text": "旧内容"},
+        },
+        provider_name="test",
+        model_name="test",
+        prompt_version="test",
+    )
+    db_session.add(copy_set)
+    db_session.commit()
+
+    with pytest.raises(BusinessValidationError, match="文案模型输出必须符合 CopyPayloadV2 合同"):
+        update_copy_set(db_session, copy_set_id=copy_set.id, structured_payload={"invalid": True})
 
 
 def test_workflow_edge_rollback_preserves_typed_business_errors(

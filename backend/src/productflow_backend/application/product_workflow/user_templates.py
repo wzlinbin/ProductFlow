@@ -310,7 +310,10 @@ def _extract_reusable_config(node: WorkflowNode) -> dict[str, Any]:
 def _normalize_template_node_config(node_type: WorkflowNodeType, config_json: dict[str, Any]) -> dict[str, Any]:
     config = dict(config_json)
     if node_type == WorkflowNodeType.IMAGE_GENERATION:
-        normalized_size = image_size_from_config(config)
+        try:
+            normalized_size = image_size_from_config(config)
+        except ValueError as exc:
+            raise BusinessValidationError(str(exc)) from exc
         if normalized_size is not None:
             config["size"] = normalized_size
         if "tool_options" in config:
@@ -319,7 +322,10 @@ def _normalize_template_node_config(node_type: WorkflowNodeType, config_json: di
                 raw_tool_options if isinstance(raw_tool_options, dict) else None
             )
     if node_type == WorkflowNodeType.COPY_GENERATION:
-        config = normalize_copy_node_config(config).model_dump(mode="json")
+        try:
+            config = normalize_copy_node_config(config).model_dump(mode="json")
+        except ValueError as exc:
+            raise BusinessValidationError(str(exc)) from exc
     return config
 
 

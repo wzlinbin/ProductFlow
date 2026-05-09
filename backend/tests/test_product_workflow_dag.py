@@ -1095,7 +1095,7 @@ def test_user_template_group_preserves_unrun_prompt_config_when_applied(configur
 
 
 def test_user_template_group_sanitizes_artifact_config_and_rejects_product_context(configured_env: Path) -> None:
-    from productflow_backend.infrastructure.db.models import UserCanvasTemplate
+    from productflow_backend.infrastructure.db.models import UserCanvasTemplate, WorkflowNode
     from productflow_backend.infrastructure.db.session import get_session_factory
     from productflow_backend.presentation.api import create_app
 
@@ -1166,6 +1166,23 @@ def test_user_template_group_sanitizes_artifact_config_and_rejects_product_conte
     )
     assert rejected.status_code == 400
     assert rejected.json()["detail"] == "模板配置包含不可复用的产物数据"
+
+    workflow = client.get(f"/api/products/{product_id}/workflow").json()
+    image_node = next(node for node in workflow["nodes"] if node["node_type"] == "image_generation")
+    session = get_session_factory()()
+    try:
+        persisted_image_node = session.get(WorkflowNode, image_node["id"])
+        assert persisted_image_node is not None
+        persisted_image_node.config_json = {"size": "bad-size"}
+        session.commit()
+    finally:
+        session.close()
+    invalid_size_save = client.post(
+        f"/api/products/{product_id}/workflow/user-template-groups",
+        json={"title": "异常尺寸模板", "node_ids": [image_node["id"]]},
+    )
+    assert invalid_size_save.status_code == 400
+    assert invalid_size_save.json() == {"detail": "生图尺寸 必须使用 宽x高 格式，例如 1024x1024"}
 
 
 def test_user_template_group_ignores_node_outputs_when_saving(configured_env: Path) -> None:

@@ -277,7 +277,10 @@ def update_copy_set(
     structured_payload: dict[str, Any],
 ) -> CopySet:
     copy_set = _get_copy_set_or_raise(session, copy_set_id)
-    payload = normalize_copy_payload(structured_payload)
+    try:
+        payload = normalize_copy_payload(structured_payload)
+    except ValueError as exc:
+        raise BusinessValidationError(str(exc)) from exc
     copy_set.structured_payload = payload.model_dump(mode="json")
     copy_set.edited_at = now_utc()
     session.commit()

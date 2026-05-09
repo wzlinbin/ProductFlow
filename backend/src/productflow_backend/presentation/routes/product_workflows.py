@@ -24,7 +24,6 @@ from productflow_backend.application.product_workflows import (
     upload_workflow_node_image,
 )
 from productflow_backend.presentation.deps import get_session, require_admin
-from productflow_backend.presentation.errors import raise_value_error_as_http
 from productflow_backend.presentation.schemas.product_workflows import (
     ApplyWorkflowTemplateGroupRequest,
     BindWorkflowNodeImageRequest,
@@ -51,10 +50,7 @@ router = APIRouter(prefix="/api", tags=["product-workflows"], dependencies=[Depe
 
 @router.get("/products/{product_id}/workflow", response_model=ProductWorkflowResponse)
 def get_product_workflow_endpoint(product_id: str, session: Session = Depends(get_session)) -> ProductWorkflowResponse:
-    try:
-        workflow = get_or_create_product_workflow(session, product_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = get_or_create_product_workflow(session, product_id)
     return serialize_product_workflow(workflow)
 
 
@@ -63,10 +59,7 @@ def get_product_workflow_status_endpoint(
     product_id: str,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowStatusResponse:
-    try:
-        workflow = get_product_workflow_status(session, product_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = get_product_workflow_status(session, product_id)
     return serialize_product_workflow_status(workflow)
 
 
@@ -86,16 +79,13 @@ def create_user_template_group_endpoint(
     payload: CreateUserTemplateGroupRequest,
     session: Session = Depends(get_session),
 ) -> CanvasTemplateSummaryResponse:
-    try:
-        template = create_user_canvas_template_from_workflow_nodes(
-            session,
-            product_id=product_id,
-            title=payload.title,
-            description=payload.description,
-            node_ids=payload.node_ids,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    template = create_user_canvas_template_from_workflow_nodes(
+        session,
+        product_id=product_id,
+        title=payload.title,
+        description=payload.description,
+        node_ids=payload.node_ids,
+    )
     return serialize_user_canvas_template_summary(template)
 
 
@@ -105,24 +95,18 @@ def update_user_template_group_endpoint(
     payload: UpdateUserTemplateGroupRequest,
     session: Session = Depends(get_session),
 ) -> CanvasTemplateSummaryResponse:
-    try:
-        template = rename_user_canvas_template(
-            session,
-            template_id=template_id,
-            title=payload.title,
-            description=payload.description,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    template = rename_user_canvas_template(
+        session,
+        template_id=template_id,
+        title=payload.title,
+        description=payload.description,
+    )
     return serialize_user_canvas_template_summary(template)
 
 
 @router.delete("/workflow/user-template-groups/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
 def archive_user_template_group_endpoint(template_id: str, session: Session = Depends(get_session)) -> None:
-    try:
-        archive_user_canvas_template(session, template_id=template_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    archive_user_canvas_template(session, template_id=template_id)
 
 
 @router.post(
@@ -135,18 +119,15 @@ def create_workflow_node_endpoint(
     payload: CreateWorkflowNodeRequest,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = create_workflow_node(
-            session,
-            product_id=product_id,
-            node_type=payload.node_type,
-            title=payload.title,
-            position_x=payload.position_x,
-            position_y=payload.position_y,
-            config_json=payload.config_json,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = create_workflow_node(
+        session,
+        product_id=product_id,
+        node_type=payload.node_type,
+        title=payload.title,
+        position_x=payload.position_x,
+        position_y=payload.position_y,
+        config_json=payload.config_json,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -160,16 +141,13 @@ def apply_workflow_template_group_endpoint(
     payload: ApplyWorkflowTemplateGroupRequest,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = apply_node_group_template_to_workflow(
-            session,
-            product_id=product_id,
-            template_key=payload.template_key,
-            position_x=payload.position_x,
-            position_y=payload.position_y,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = apply_node_group_template_to_workflow(
+        session,
+        product_id=product_id,
+        template_key=payload.template_key,
+        position_x=payload.position_x,
+        position_y=payload.position_y,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -179,17 +157,14 @@ def update_workflow_node_endpoint(
     payload: UpdateWorkflowNodeRequest,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = update_workflow_node(
-            session,
-            node_id=node_id,
-            title=payload.title,
-            position_x=payload.position_x,
-            position_y=payload.position_y,
-            config_json=payload.config_json,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = update_workflow_node(
+        session,
+        node_id=node_id,
+        title=payload.title,
+        position_x=payload.position_x,
+        position_y=payload.position_y,
+        config_json=payload.config_json,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -199,14 +174,11 @@ def update_workflow_copy_set_endpoint(
     payload: UpdateWorkflowCopySetRequest,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = update_workflow_copy_set(
-            session,
-            node_id=node_id,
-            structured_payload=payload.structured_payload,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = update_workflow_copy_set(
+        session,
+        node_id=node_id,
+        structured_payload=payload.structured_payload,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -219,18 +191,15 @@ async def upload_workflow_node_image_endpoint(
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
     validated = await read_validated_image_upload(image, fallback_filename="workflow-image.bin")
-    try:
-        workflow = upload_workflow_node_image(
-            session,
-            node_id=node_id,
-            image_bytes=validated.content,
-            filename=validated.filename,
-            content_type=validated.mime_type,
-            role=role,
-            label=label,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = upload_workflow_node_image(
+        session,
+        node_id=node_id,
+        image_bytes=validated.content,
+        filename=validated.filename,
+        content_type=validated.mime_type,
+        role=role,
+        label=label,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -240,15 +209,12 @@ def bind_workflow_node_image_endpoint(
     payload: BindWorkflowNodeImageRequest,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = bind_workflow_node_image(
-            session,
-            node_id=node_id,
-            source_asset_id=payload.source_asset_id,
-            poster_variant_id=payload.poster_variant_id,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = bind_workflow_node_image(
+        session,
+        node_id=node_id,
+        source_asset_id=payload.source_asset_id,
+        poster_variant_id=payload.poster_variant_id,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -262,35 +228,26 @@ def create_workflow_edge_endpoint(
     payload: CreateWorkflowEdgeRequest,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = create_workflow_edge(
-            session,
-            product_id=product_id,
-            source_node_id=payload.source_node_id,
-            target_node_id=payload.target_node_id,
-            source_handle=payload.source_handle,
-            target_handle=payload.target_handle,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = create_workflow_edge(
+        session,
+        product_id=product_id,
+        source_node_id=payload.source_node_id,
+        target_node_id=payload.target_node_id,
+        source_handle=payload.source_handle,
+        target_handle=payload.target_handle,
+    )
     return serialize_product_workflow(workflow)
 
 
 @router.delete("/workflow-edges/{edge_id}", response_model=ProductWorkflowResponse)
 def delete_workflow_edge_endpoint(edge_id: str, session: Session = Depends(get_session)) -> ProductWorkflowResponse:
-    try:
-        workflow = delete_workflow_edge(session, edge_id=edge_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = delete_workflow_edge(session, edge_id=edge_id)
     return serialize_product_workflow(workflow)
 
 
 @router.delete("/workflow-nodes/{node_id}", response_model=ProductWorkflowResponse)
 def delete_workflow_node_endpoint(node_id: str, session: Session = Depends(get_session)) -> ProductWorkflowResponse:
-    try:
-        workflow = delete_workflow_node(session, node_id=node_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = delete_workflow_node(session, node_id=node_id)
     return serialize_product_workflow(workflow)
 
 
@@ -300,14 +257,11 @@ def run_product_workflow_endpoint(
     payload: RunWorkflowRequest | None = None,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = submit_product_workflow_run(
-            session,
-            product_id=product_id,
-            start_node_id=payload.start_node_id if payload else None,
-        )
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = submit_product_workflow_run(
+        session,
+        product_id=product_id,
+        start_node_id=payload.start_node_id if payload else None,
+    )
     return serialize_product_workflow(workflow)
 
 
@@ -317,10 +271,7 @@ def cancel_product_workflow_run_endpoint(
     run_id: str,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = cancel_product_workflow_run(session, product_id=product_id, run_id=run_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = cancel_product_workflow_run(session, product_id=product_id, run_id=run_id)
     return serialize_product_workflow(workflow)
 
 
@@ -334,8 +285,5 @@ def retry_product_workflow_run_endpoint(
     run_id: str,
     session: Session = Depends(get_session),
 ) -> ProductWorkflowResponse:
-    try:
-        workflow = retry_product_workflow_run(session, product_id=product_id, run_id=run_id)
-    except ValueError as exc:
-        raise_value_error_as_http(exc)
+    workflow = retry_product_workflow_run(session, product_id=product_id, run_id=run_id)
     return serialize_product_workflow(workflow)

@@ -141,7 +141,10 @@ def _active_workflow_run(workflow: ProductWorkflow) -> WorkflowRun | None:
 def _normalize_node_config(node_type: WorkflowNodeType, config_json: dict[str, Any] | None) -> dict[str, Any]:
     config = dict(config_json or {})
     if node_type == WorkflowNodeType.IMAGE_GENERATION:
-        normalized_size = image_size_from_config(config)
+        try:
+            normalized_size = image_size_from_config(config)
+        except ValueError as exc:
+            raise BusinessValidationError(str(exc)) from exc
         if normalized_size is not None:
             config["size"] = normalized_size
         if "tool_options" in config:

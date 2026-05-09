@@ -20,6 +20,7 @@ from productflow_backend.infrastructure.queue import (
     recover_unfinished_image_session_generation_tasks,
     recover_unfinished_workflow_runs,
 )
+from productflow_backend.presentation.errors import register_exception_handlers
 from productflow_backend.presentation.routes.auth import router as auth_router
 from productflow_backend.presentation.routes.gallery import router as gallery_router
 from productflow_backend.presentation.routes.generation_queue import router as generation_queue_router
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
         yield
 
     app = FastAPI(title="ProductFlow API", version="0.1.0", lifespan=lifespan)
+    register_exception_handlers(app)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
