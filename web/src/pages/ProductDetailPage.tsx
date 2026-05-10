@@ -1189,9 +1189,9 @@ export function ProductDetailPage() {
           </div>
         ) : null}
 
-        <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:18px_18px]" />
-          <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-transparent to-indigo-50/40" />
+        <div className="relative flex min-h-0 flex-1 overflow-hidden bg-slate-50 dark:bg-[#06111f]">
+          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:18px_18px] dark:bg-[radial-gradient(rgba(125,158,190,0.32)_1px,transparent_1px)]" />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-transparent to-indigo-50/40 dark:from-slate-950/70 dark:via-[#06111f]/45 dark:to-[#0b1f35]/40" />
           <section className="relative z-10 min-w-0 flex-1 overflow-hidden">
             <div data-canvas-control className="pointer-events-none absolute right-4 top-4 z-30">
               <button

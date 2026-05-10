@@ -85,16 +85,16 @@ export function WorkflowNodeCard({
   const imageWaiting = isImageWorkflowNodeWaiting(node);
   const waitingLabel = imageWorkflowNodeWaitingLabel(node, t);
   const selectedClassName = primarySelected
-    ? "border-indigo-300 shadow-lg shadow-indigo-950/10 ring-2 ring-indigo-200/70"
+    ? "border-indigo-300 shadow-lg shadow-indigo-950/10 ring-2 ring-indigo-200/70 dark:border-indigo-400 dark:shadow-indigo-950/30 dark:ring-indigo-300/70"
     : secondarySelected || previewSelected
-      ? "border-sky-300 shadow-md shadow-sky-950/5 ring-2 ring-sky-100"
-      : "border-slate-200";
+      ? "border-sky-300 shadow-md shadow-sky-950/5 ring-2 ring-sky-100 dark:border-sky-400 dark:shadow-sky-950/25 dark:ring-sky-300/55"
+      : "border-slate-200 dark:border-slate-700";
 
   return (
     <div
       ref={nodeRef}
       data-workflow-node-id={node.id}
-      className={`absolute w-[248px] touch-none select-none rounded-2xl border bg-white/95 p-3 text-left shadow-sm backdrop-blur ${
+      className={`absolute w-[248px] touch-none select-none rounded-2xl border bg-white/95 p-3 text-left shadow-sm backdrop-blur dark:bg-slate-900/92 dark:shadow-slate-950/30 ${
         dragging ? "cursor-grabbing" : "transition-[border-color,box-shadow] hover:shadow-md"
       } ${selectedClassName}`}
       style={{
@@ -111,8 +111,10 @@ export function WorkflowNodeCard({
     >
       {primarySelected || secondarySelected || previewSelected ? (
         <div
-          className={`pointer-events-none absolute right-2 top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full border bg-white shadow-sm ${
-            primarySelected ? "border-indigo-200 text-indigo-600" : "border-sky-200 text-sky-600"
+          className={`pointer-events-none absolute right-2 top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full border bg-white shadow-sm dark:bg-slate-950 ${
+            primarySelected
+              ? "border-indigo-200 text-indigo-600 dark:border-indigo-300 dark:text-indigo-200"
+              : "border-sky-200 text-sky-600 dark:border-sky-300 dark:text-sky-200"
           }`}
           aria-hidden="true"
         >
@@ -124,7 +126,7 @@ export function WorkflowNodeCard({
         data-node-action
         data-workflow-target-node-id={node.id}
         onClick={onSelect}
-        className="absolute left-[-9px] top-[47px] z-20 h-[18px] w-[18px] rounded-full border border-slate-300 bg-white shadow-sm hover:border-indigo-400 hover:ring-4 hover:ring-indigo-100"
+        className="absolute left-[-9px] top-[47px] z-20 h-[18px] w-[18px] rounded-full border border-slate-300 bg-white shadow-sm hover:border-indigo-400 hover:ring-4 hover:ring-indigo-100 dark:border-slate-500 dark:bg-slate-950 dark:hover:border-indigo-300 dark:hover:ring-indigo-400/20"
         title={t("detail.inputHandle")}
         aria-label={`${displayTitle} ${t("detail.inputHandle")}`}
       />
@@ -135,21 +137,21 @@ export function WorkflowNodeCard({
         onPointerMove={onMoveConnection}
         onPointerUp={onEndConnection}
         onPointerCancel={onEndConnection}
-        className="absolute right-[-10px] top-[46px] z-20 h-5 w-5 rounded-full border-2 border-indigo-500 bg-white shadow-sm hover:bg-indigo-50 hover:ring-4 hover:ring-indigo-100"
+        className="absolute right-[-10px] top-[46px] z-20 h-5 w-5 rounded-full border-2 border-indigo-500 bg-white shadow-sm hover:bg-indigo-50 hover:ring-4 hover:ring-indigo-100 dark:border-indigo-400 dark:bg-slate-950 dark:hover:bg-indigo-500/20 dark:hover:ring-indigo-400/25"
         title={t("detail.dragOutput")}
         aria-label={`${displayTitle} ${t("detail.outputHandle")}`}
       />
       <div onClick={onSelect} className="cursor-grab active:cursor-grabbing">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex min-w-0 gap-2">
-            <span className="mt-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1.5 text-slate-500">
+            <span className="mt-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1.5 text-slate-500 dark:border-slate-700 dark:bg-slate-950/75 dark:text-slate-100">
               <Icon size={14} />
             </span>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-zinc-900">
+              <div className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
                 {displayTitle}
               </div>
-              <div className="mt-0.5 text-[10px] uppercase tracking-wider text-zinc-400">
+              <div className="mt-0.5 text-[10px] uppercase tracking-wider text-zinc-400 dark:text-slate-100">
                 {displayLabel}
               </div>
             </div>
@@ -171,28 +173,28 @@ export function WorkflowNodeCard({
             />
             <DownloadLink image={image} variant="overlay" />
             {imageWaiting ? (
-              <div className="absolute inset-x-2 bottom-2 flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-[11px] font-medium text-indigo-700 shadow-sm ring-1 ring-indigo-100 backdrop-blur">
+              <div className="absolute inset-x-2 bottom-2 flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-[11px] font-medium text-indigo-700 shadow-sm ring-1 ring-indigo-100 backdrop-blur dark:bg-slate-950/90 dark:text-indigo-100 dark:ring-indigo-400/30">
                 <Loader2 size={11} className="mr-1 animate-spin" />
                 {waitingLabel}
               </div>
             ) : null}
           </div>
         ) : imageWaiting ? (
-          <div className="mb-2 flex h-28 flex-col items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-700">
+          <div className="mb-2 flex h-28 flex-col items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-700 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:text-indigo-100">
             <Loader2 size={18} className="animate-spin" />
             <div className="mt-2 text-xs font-medium">{waitingLabel}</div>
           </div>
         ) : null}
         {node.failure_reason ? (
-          <div className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs leading-relaxed text-red-700">
+          <div className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs leading-relaxed text-red-700 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-200">
             <div className="line-clamp-2">{node.failure_reason}</div>
             {!runActionState.disabled ? (
-              <div className="mt-1 text-[10px] font-medium text-red-600">{t("detail.retryable")}</div>
+              <div className="mt-1 text-[10px] font-medium text-red-600 dark:text-red-200">{t("detail.retryable")}</div>
             ) : null}
           </div>
         ) : null}
       </div>
-      <div className="mt-3 flex items-center justify-between text-[10px] text-zinc-400">
+      <div className="mt-3 flex items-center justify-between text-[10px] text-zinc-400 dark:text-slate-100">
         <span>{node.last_run_at ? t("detail.recent", { time: formatDateTime(node.last_run_at) }) : displayLabel}</span>
         {node.node_type !== "product_context" ? (
           <div className="flex items-center gap-1.5">
@@ -201,7 +203,7 @@ export function WorkflowNodeCard({
               data-node-action
               onClick={onDelete}
               disabled={busy}
-              className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-50 dark:border-slate-700 dark:text-red-300 dark:hover:border-red-400/60 dark:hover:bg-red-500/10"
             >
               <Trash2 size={11} className="mr-1" /> {t("detail.delete")}
             </button>
@@ -210,7 +212,7 @@ export function WorkflowNodeCard({
               data-node-action
               onClick={onRun}
               disabled={runActionState.disabled}
-              className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50"
+              className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-400 dark:hover:text-white"
               title={runActionState.title}
               aria-label={`${displayTitle} ${runActionState.label}`}
             >
