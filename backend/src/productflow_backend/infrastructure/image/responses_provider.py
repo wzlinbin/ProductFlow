@@ -787,7 +787,7 @@ class OpenAIResponsesImageProvider(ImageProvider):
     def _build_context_block(self, poster: PosterGenerationInput) -> str:
         lines: list[str] = []
         if poster.product_name:
-            lines.append(f"- 商品/主体：{poster.product_name}")
+            lines.append(f"- 画面主体：{poster.product_name}")
         if poster.category:
             lines.append(f"- 类目/类型：{poster.category}")
         if poster.price:
@@ -795,7 +795,10 @@ class OpenAIResponsesImageProvider(ImageProvider):
         if poster.source_note:
             lines.append(f"- 补充说明：{poster.source_note}")
         if poster.copy_prompt_mode == "copy" and poster.structured_copy_context:
-            lines.append(f"- 结构化文案：\n{poster.structured_copy_context}")
+            lines.append(
+                "- 可用文案参考（仅在用户要求图片包含文字时使用，不要绘制字段名、标签名或上下文说明）：\n"
+                f"{poster.structured_copy_context}"
+            )
         if poster.reference_images or poster.source_image is not None:
             reference_paths = {str(reference.path.resolve()) for reference in poster.reference_images}
             if poster.source_image is not None:
@@ -814,4 +817,7 @@ class OpenAIResponsesImageProvider(ImageProvider):
 
     def _build_kind_requirements(self, kind: PosterKind) -> str:
         kind_label = "主图" if kind == PosterKind.MAIN_IMAGE else "海报/竖图"
-        return f"输出用途：{kind_label}。仅遵循用户要求和上游上下文，不额外添加未要求的文字、品牌、水印或 UI 面板。"
+        return (
+            f"输出用途：{kind_label}。上游上下文只用于理解画面主体、材质、场景和文案参考；"
+            "不要把字段名、标签名、JSON key、上下文说明、品牌、水印或 UI 面板画进图片。"
+        )

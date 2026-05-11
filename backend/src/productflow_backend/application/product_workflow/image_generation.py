@@ -85,6 +85,13 @@ def call_with_timeout[T](call: Callable[[], T], *, timeout_seconds: float, timeo
         return result
 
 
+def _is_workflow_context_copy_set(copy_set: CopySet) -> bool:
+    if copy_set.provider_name == "workflow_context":
+        return True
+    payload = copy_set.structured_payload
+    return isinstance(payload, dict) and payload.get("purpose") == "workflow_context"
+
+
 def execute_workflow_image_generation(
     session: Session,
     *,
@@ -105,10 +112,16 @@ def execute_workflow_image_generation(
     has_linked_copy_input = (
         linked_copy_set_id is not None and copy_set is not None and copy_set.product_id == product.id
     )
+    has_real_copy_context = (
+        has_linked_copy_input
+        and copy_set is not None
+        and copy_set.product_id == product.id
+        and not _is_workflow_context_copy_set(copy_set)
+    )
     if copy_set is None or copy_set.product_id != product.id:
         copy_set = create_context_copy_set(session, product=product, product_context=product_context, node=node)
     structured_copy_context = None
-    if isinstance(copy_set.structured_payload, dict):
+    if has_real_copy_context and isinstance(copy_set.structured_payload, dict):
         try:
             structured_copy_context = copy_payload_context_text(normalize_copy_payload(copy_set.structured_payload))
         except ValueError:

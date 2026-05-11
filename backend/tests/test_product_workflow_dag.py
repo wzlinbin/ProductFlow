@@ -1486,6 +1486,113 @@ def test_direct_downstream_run_uses_latest_saved_product_context(configured_env:
     )
     assert any("最新说明" in source["text"] for source in image_output["context_sources"])
 
+
+def test_product_context_ignores_unresolved_placeholder_values(
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.infrastructure.image.base import GeneratedImagePayload
+    from productflow_backend.presentation.api import create_app
+
+    session = get_session_factory()()
+    try:
+        session.add(AppSetting(key="poster_generation_mode", value="generated"))
+        session.commit()
+    finally:
+        session.close()
+
+    captured_inputs: list[PosterGenerationInput] = []
+
+    class CapturingImageProvider:
+        provider_name = "capturing"
+        prompt_version = "capturing-v1"
+
+        def generate_poster_image(
+            self,
+            poster: PosterGenerationInput,
+            kind: PosterKind,
+        ) -> tuple[GeneratedImagePayload, str]:
+            captured_inputs.append(poster)
+            return (
+                GeneratedImagePayload(
+                    kind=kind,
+                    bytes_data=_make_demo_image_bytes(),
+                    mime_type="image/png",
+                    width=800,
+                    height=800,
+                    variant_label="capturing-placeholder-filter",
+                ),
+                "capturing-v1",
+            )
+
+    _execute_workflow_queue_inline(
+        monkeypatch,
+        dependencies=WorkflowExecutionDependencies(
+            image_provider_resolver=CapturingImageProvider,
+        ),
+    )
+
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+
+    created = client.post(
+        "/api/products",
+        data={"name": "测试手机壳"},
+        files={"image": ("case.png", _make_demo_image_bytes(), "image/png")},
+    )
+    assert created.status_code == 201
+    product_id = created.json()["id"]
+
+    workflow_response = client.get(f"/api/products/{product_id}/workflow")
+    assert workflow_response.status_code == 200
+    workflow = workflow_response.json()
+    context_node = next(node for node in workflow["nodes"] if node["node_type"] == "product_context")
+    copy_node = next(node for node in workflow["nodes"] if node["node_type"] == "copy_generation")
+    image_node = next(node for node in workflow["nodes"] if node["node_type"] == "image_generation")
+
+    deleted_copy = client.delete(f"/api/workflow-nodes/{copy_node['id']}")
+    assert deleted_copy.status_code == 200
+
+    patched_context = client.patch(
+        f"/api/workflow-nodes/{context_node['id']}",
+        json={
+            "config_json": {
+                "name": "测试手机壳",
+                "category": "{category}",
+                "price": "{price}",
+                "source_note": "{source_note}",
+            }
+        },
+    )
+    assert patched_context.status_code == 200
+
+    selected_run = client.post(
+        f"/api/products/{product_id}/workflow/run",
+        json={"start_node_id": image_node["id"]},
+    )
+    assert selected_run.status_code == 200
+    payload = _wait_for_workflow_run(client, product_id, status="succeeded")
+    image_output = next(node for node in payload["nodes"] if node["id"] == image_node["id"])["output_json"]
+
+    assert image_output["context_summary"]["product_context"] == {
+        "name": "测试手机壳",
+        "category": None,
+        "price": None,
+        "source_note": None,
+    }
+    assert not any("{category}" in source["text"] for source in image_output["context_sources"])
+    assert not any("{price}" in source["text"] for source in image_output["context_sources"])
+    assert not any("{source_note}" in source["text"] for source in image_output["context_sources"])
+    assert len(captured_inputs) == 1
+    provider_input = captured_inputs[0]
+    assert provider_input.product_name == "测试手机壳"
+    assert provider_input.category is None
+    assert provider_input.price is None
+    assert provider_input.source_note is None
+    assert provider_input.structured_copy_context is None
+
+
 def test_product_context_source_image_reaches_image_generation_context(
     configured_env: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1709,6 +1816,9 @@ def test_image_generation_collects_product_context_through_upstream_copy_edge(
     assert provider_input.category == "户外家具"
     assert provider_input.price == "129"
     assert provider_input.source_note == "铝合金支架，可折叠收纳，适合露营和阳台休息。"
+    assert provider_input.structured_copy_context is not None
+    assert "workflow_context" not in provider_input.structured_copy_context
+    assert "折叠露营椅" in provider_input.structured_copy_context
     assert provider_input.source_image is not None
     assert len(provider_input.reference_images) == 1
     assert provider_input.reference_images[0].path == provider_input.source_image
@@ -2055,9 +2165,7 @@ def test_image_generation_runs_without_product_context_edge(
     assert len(captured_inputs) == 1
     provider_input = captured_inputs[0]
     assert provider_input.product_name == ""
-    assert provider_input.structured_copy_context
-    assert "自由创作" in provider_input.structured_copy_context
-    assert "不应被空白生图继承" not in provider_input.structured_copy_context
+    assert provider_input.structured_copy_context is None
     assert provider_input.source_image is None
     assert provider_input.reference_images == []
     assert provider_input.image_size == "1280x720"

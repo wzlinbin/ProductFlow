@@ -182,7 +182,7 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
         "1024x1024",
     )
     assert "自定义海报 测试商品 / 强调轻便 / 主图 /" in poster_prompt
-    assert "结构化文案" in poster_prompt
+    assert "可用文案参考" in poster_prompt
     assert "卖点：卖点一" in poster_prompt
     assert poster_prompt.endswith("自定义视觉参考规则")
 
@@ -1526,6 +1526,8 @@ def test_openai_image_prompt_uses_structured_copy_context(configured_env: Path) 
     assert "结构化主标题" in prompt
     assert "结构化正文" in prompt
     assert "结构化卖点" in prompt
+    assert "可用文案参考" in prompt
+    assert "字段名、标签名或上下文说明" in prompt
     assert "不应作为主输入" not in prompt
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,8 @@ from productflow_backend.infrastructure.db.models import (
     WorkflowNode,
 )
 from productflow_backend.infrastructure.storage import LocalStorage
+
+_UNRESOLVED_PLACEHOLDER_PATTERN = re.compile(r"^\{[A-Za-z_][A-Za-z0-9_]*\}$")
 
 
 def find_source_asset(product: Product) -> SourceAsset | None:
@@ -136,7 +139,10 @@ def _configured_text(config: dict[str, Any], key: str, *, fallback: str | None =
     if value is None:
         return None
     if isinstance(value, str):
-        return value.strip() or None
+        normalized = value.strip()
+        if _UNRESOLVED_PLACEHOLDER_PATTERN.fullmatch(normalized):
+            return fallback
+        return normalized or None
     return str(value)
 
 
