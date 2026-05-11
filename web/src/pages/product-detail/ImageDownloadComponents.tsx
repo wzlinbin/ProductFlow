@@ -16,8 +16,8 @@ export function DownloadLink({
   const { t } = useI18n();
   const className =
     variant === "overlay"
-      ? "absolute bottom-2 right-2 inline-flex items-center rounded bg-white/95 px-2 py-1 text-[10px] font-medium text-zinc-700 shadow-sm ring-1 ring-zinc-200 hover:bg-white"
-      : "inline-flex items-center rounded border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50";
+      ? "absolute bottom-2 right-2 inline-flex items-center rounded bg-white/95 px-2 py-1 text-[10px] font-medium text-zinc-700 shadow-sm ring-1 ring-zinc-200 hover:bg-white dark:bg-slate-950/88 dark:text-slate-100 dark:ring-slate-700 dark:hover:bg-slate-900"
+      : "inline-flex items-center rounded border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-violet-400/50 dark:hover:bg-violet-500/12 dark:hover:text-white";
   return (
     <a
       data-node-action
@@ -54,14 +54,14 @@ export function PosterThumb({
   const image = buildPosterDownload(productName, poster, undefined, t);
   const thumbnailImage = buildPosterDownload(productName, poster, poster.thumbnail_url, t);
   return (
-    <div className="group overflow-hidden rounded-md border border-zinc-200 bg-white">
+    <div className="group overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-slate-700/80 dark:bg-[#151f33]">
       <button
         type="button"
         onClick={() => onPreview?.(image)}
         className="block w-full"
         aria-label={t("detail.previewImage", { alt: image.alt })}
       >
-        <div className="aspect-square bg-zinc-100">
+        <div className="aspect-square bg-zinc-100 dark:bg-[#0b1220]">
           <img
             src={thumbnailImage.previewUrl}
             alt={image.alt}
@@ -69,7 +69,7 @@ export function PosterThumb({
           />
         </div>
       </button>
-      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2 py-1 text-[10px] text-zinc-500">
+      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2 py-1 text-[10px] text-zinc-500 dark:border-slate-700 dark:text-slate-400">
         <span className="min-w-0 truncate">
           {poster.kind === "main_image" ? t("detail.mainImage") : t("detail.promoImage")} ·{" "}
           {formatDateTime(poster.created_at)}
@@ -84,7 +84,7 @@ export function PosterThumb({
                 onUseAsReference();
               }}
               disabled={useAsReferenceDisabled || useAsReferenceBusy}
-              className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/15 dark:text-violet-100 dark:hover:border-violet-300 dark:hover:bg-violet-500/22"
               title={t("detail.fillCurrentNode")}
             >
               {useAsReferenceBusy ? t("detail.filling") : t("detail.fill")}
@@ -128,14 +128,14 @@ export function SourceAssetThumb({
     t,
   );
   return (
-    <div className="group overflow-hidden rounded-md border border-zinc-200 bg-white">
+    <div className="group overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-slate-700/80 dark:bg-[#151f33]">
       <button
         type="button"
         onClick={() => onPreview?.(image)}
         className="block w-full"
         aria-label={t("detail.previewImage", { alt: image.alt })}
       >
-        <div className="flex aspect-square items-center justify-center bg-zinc-100 p-2">
+        <div className="flex aspect-square items-center justify-center bg-zinc-100 p-2 dark:bg-[#0b1220]">
           <img
             src={thumbnailImage.previewUrl}
             alt={image.alt}
@@ -143,7 +143,7 @@ export function SourceAssetThumb({
           />
         </div>
       </button>
-      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2 py-1 text-[10px] text-zinc-500">
+      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2 py-1 text-[10px] text-zinc-500 dark:border-slate-700 dark:text-slate-400">
         <span className="min-w-0 truncate">
           {t("detail.referenceImage")} · {formatDateTime(asset.created_at)}
         </span>
@@ -157,7 +157,7 @@ export function SourceAssetThumb({
                 onUseAsReference();
               }}
               disabled={useAsReferenceDisabled || useAsReferenceBusy}
-              className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/15 dark:text-violet-100 dark:hover:border-violet-300 dark:hover:bg-violet-500/22"
               title={t("detail.fillCurrentNode")}
             >
               {useAsReferenceBusy ? t("detail.filling") : t("detail.fill")}
@@ -167,8 +167,8 @@ export function SourceAssetThumb({
         </div>
       </div>
       {onUseAsReference ? (
-        <div className="flex items-center border-t border-zinc-100 px-2 py-1.5 text-[10px] leading-4 text-zinc-500">
-          <Sparkles size={11} className="mr-1 shrink-0 text-indigo-500" />
+        <div className="flex items-center border-t border-zinc-100 px-2 py-1.5 text-[10px] leading-4 text-zinc-500 dark:border-slate-700 dark:text-slate-300">
+          <Sparkles size={11} className="mr-1 shrink-0 text-indigo-500 dark:text-violet-300" />
           {t("detail.canUseAsReference")}
         </div>
       ) : null}

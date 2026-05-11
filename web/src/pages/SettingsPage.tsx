@@ -105,9 +105,9 @@ function sourceLabel(item: ConfigItem, t: ReturnType<typeof useI18n>["t"]): stri
 
 function sourceClassName(item: ConfigItem): string {
   if (item.source === "database") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-200";
   }
-  return "border-zinc-200 bg-zinc-50 text-zinc-500";
+  return "border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300";
 }
 
 interface ConfigFieldProps {
@@ -123,7 +123,7 @@ interface ConfigFieldProps {
 function ConfigField({ item, value, secretTouched, isResetting, compact = false, onChange, onReset }: ConfigFieldProps) {
   const { t } = useI18n();
   const baseInputClass =
-    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 transition-shadow placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 transition-shadow placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400/20";
   const selectedMultiValues = Array.isArray(value) ? value : [];
   const toggleMultiValue = (optionValue: string) => {
     const selected = new Set(selectedMultiValues);
@@ -147,7 +147,7 @@ function ConfigField({ item, value, secretTouched, isResetting, compact = false,
         {item.options.map((option) => (
           <label
             key={`${item.key}-${option.value}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300"
           >
             <input
               type="checkbox"
@@ -181,7 +181,7 @@ function ConfigField({ item, value, secretTouched, isResetting, compact = false,
         className={`${baseInputClass} resize-y leading-6`}
       />
     ) : item.input_type === "boolean" ? (
-      <label className="inline-flex cursor-pointer items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-zinc-300">
+      <label className="inline-flex cursor-pointer items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-zinc-300 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12">
         <input
           id={item.key}
           type="checkbox"
@@ -207,9 +207,9 @@ function ConfigField({ item, value, secretTouched, isResetting, compact = false,
 
   if (compact) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-[#151f33]">
         <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
-          <label htmlFor={item.key} className="truncate text-xs font-semibold text-zinc-900">
+          <label htmlFor={item.key} className="truncate text-xs font-semibold text-zinc-900 dark:text-white">
             {item.label}
           </label>
           <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${sourceClassName(item)}`}>
@@ -218,13 +218,13 @@ function ConfigField({ item, value, secretTouched, isResetting, compact = false,
         </div>
         {control}
         <div className="mt-2 flex min-h-5 items-center justify-between gap-2">
-          <span className="truncate font-mono text-[10px] text-zinc-400">{item.key}</span>
+          <span className="truncate font-mono text-[10px] text-zinc-400 dark:text-slate-500">{item.key}</span>
           {item.source === "database" ? (
             <button
               type="button"
               onClick={onReset}
               disabled={isResetting}
-              className="inline-flex shrink-0 items-center text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-50"
+              className="inline-flex shrink-0 items-center text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-50 dark:text-slate-400 dark:hover:text-white"
               aria-label={t("settings.restoreDefaultAria", { label: item.label })}
             >
               {isResetting ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
@@ -236,33 +236,33 @@ function ConfigField({ item, value, secretTouched, isResetting, compact = false,
   }
 
   return (
-    <div className="grid gap-3 border-t border-slate-100 py-5 first:border-t-0 md:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="grid gap-3 border-t border-slate-100 py-5 first:border-t-0 dark:border-slate-800 md:grid-cols-[220px_minmax(0,1fr)]">
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={item.key} className="text-sm font-medium text-zinc-900">
+          <label htmlFor={item.key} className="text-sm font-medium text-zinc-900 dark:text-white">
             {item.label}
           </label>
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${sourceClassName(item)}`}>
             {sourceLabel(item, t)}
           </span>
         </div>
-        <div className="mt-1 font-mono text-[11px] text-zinc-400">{item.key}</div>
+        <div className="mt-1 font-mono text-[11px] text-zinc-400 dark:text-slate-500">{item.key}</div>
       </div>
 
       <div className="space-y-2">
         {control}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="min-h-4 text-xs leading-5 text-zinc-500">
+          <p className="min-h-4 text-xs leading-5 text-zinc-500 dark:text-slate-400">
             {description}
-            {item.secret && secretTouched ? <span className="ml-2 text-amber-600">{t("settings.writeNewSecret")}</span> : null}
+            {item.secret && secretTouched ? <span className="ml-2 text-amber-600 dark:text-amber-300">{t("settings.writeNewSecret")}</span> : null}
           </p>
           {item.source === "database" ? (
             <button
               type="button"
               onClick={onReset}
               disabled={isResetting}
-              className="inline-flex items-center text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-50"
+              className="inline-flex items-center text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-50 dark:text-slate-400 dark:hover:text-white"
             >
               {isResetting ? <Loader2 size={13} className="mr-1 animate-spin" /> : <RotateCcw size={13} className="mr-1" />}
               {t("settings.restoreDefault")}
@@ -454,7 +454,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-[#060a12] dark:text-slate-100">
       <TopNav
         breadcrumbs={t("settings.breadcrumb")}
         onHome={() => navigate("/products")}
@@ -463,54 +463,54 @@ export function SettingsPage() {
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 px-6 py-8 lg:py-10">
         <div className="w-full">
-          <div className="mb-8 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60 md:flex-row md:items-end md:justify-between">
+          <div className="mb-8 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[0_20px_70px_rgba(0,0,0,0.28)] md:flex-row md:items-end md:justify-between">
             <div>
-              <div className="mb-3 inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+              <div className="mb-3 inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:border-violet-400/35 dark:bg-violet-500/15 dark:text-violet-100">
                 <SettingsIcon size={13} className="mr-1.5" /> Runtime Config
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{t("settings.title")}</h1>
-              <p className="mt-1 text-sm text-slate-500">
+              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">{t("settings.title")}</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {t("settings.description")}
               </p>
             </div>
             <button
               type="button"
               onClick={() => navigate("/products")}
-              className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900"
+              className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-slate-400 dark:hover:text-white"
             >
               {t("settings.back")}
             </button>
           </div>
 
           {isCheckingLockState ? (
-            <div className="flex justify-center py-20 text-zinc-400">
+            <div className="flex justify-center py-20 text-zinc-400 dark:text-slate-500">
               <Loader2 size={22} className="animate-spin" />
             </div>
           ) : lockStateQuery.isError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
               {t("settings.lockLoadFailed")}
             </div>
           ) : !lockStateQuery.data?.configured ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
               {t("settings.tokenMissing")}
             </div>
           ) : !lockStateQuery.data.unlocked ? (
             <form
               onSubmit={handleUnlock}
-              className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50"
+              className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-black/20"
             >
               <div className="mb-5 flex items-start gap-3">
-                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:border dark:border-violet-400/35 dark:bg-violet-500/15 dark:text-violet-100">
                   <LockKeyhole size={18} />
                 </span>
                 <div>
-                  <h2 className="text-base font-semibold text-slate-950">{t("settings.unlockTitle")}</h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                  <h2 className="text-base font-semibold text-slate-950 dark:text-white">{t("settings.unlockTitle")}</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
                     {t("settings.unlockDescription")}
                   </p>
                 </div>
               </div>
-              <label htmlFor="settings-token" className="text-sm font-medium text-slate-800">
+              <label htmlFor="settings-token" className="text-sm font-medium text-slate-800 dark:text-slate-300">
                 {t("settings.unlockToken")}
               </label>
               <input
@@ -518,12 +518,12 @@ export function SettingsPage() {
                 type="password"
                 value={unlockToken}
                 onChange={(event) => setUnlockToken(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 transition-shadow placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 transition-shadow placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400/20"
                 placeholder={t("settings.unlockPlaceholder")}
                 autoComplete="current-password"
               />
               {error ? (
-                <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
                   {error}
                 </div>
               ) : null}
@@ -531,7 +531,7 @@ export function SettingsPage() {
                 <button
                   type="submit"
                   disabled={unlockMutation.isPending || !unlockToken.trim()}
-                  className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                  className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:opacity-50 dark:bg-gradient-to-r dark:from-indigo-500 dark:to-violet-500 dark:shadow-violet-900/35 dark:ring-1 dark:ring-violet-300/35"
                 >
                   {unlockMutation.isPending ? (
                     <Loader2 size={14} className="mr-2 animate-spin" />
@@ -543,22 +543,22 @@ export function SettingsPage() {
               </div>
             </form>
           ) : configQuery.isLoading ? (
-            <div className="flex justify-center py-20 text-zinc-400">
+            <div className="flex justify-center py-20 text-zinc-400 dark:text-slate-500">
               <Loader2 size={22} className="animate-spin" />
             </div>
           ) : configQuery.isError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
               {configQuery.error instanceof ApiError ? configQuery.error.detail : t("settings.loadFailed")}
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               {activeGroup ? (
                 <>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/50">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/50 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-black/20">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <div className="text-sm font-semibold text-slate-950">{t("settings.categories")}</div>
-                        <div className="mt-1 text-xs text-slate-500">
+                        <div className="text-sm font-semibold text-slate-950 dark:text-white">{t("settings.categories")}</div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {t("settings.categorySummary", {
                             page: activePageNumber,
                             totalPages: groupedItems.length,
@@ -571,19 +571,19 @@ export function SettingsPage() {
                           type="button"
                           onClick={() => setActiveConfigCategory(groupedItems[activeGroupIndex - 1]?.category ?? activeGroup.category)}
                           disabled={activeGroupIndex === 0}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950 disabled:opacity-40"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950 disabled:opacity-40 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
                           aria-label={t("settings.prevCategory")}
                         >
                           <ChevronLeft size={16} />
                         </button>
-                        <span className="min-w-14 text-center text-xs font-semibold text-slate-500">
+                        <span className="min-w-14 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">
                           {activePageNumber}/{groupedItems.length}
                         </span>
                         <button
                           type="button"
                           onClick={() => setActiveConfigCategory(groupedItems[activeGroupIndex + 1]?.category ?? activeGroup.category)}
                           disabled={activeGroupIndex >= groupedItems.length - 1}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950 disabled:opacity-40"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950 disabled:opacity-40 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
                           aria-label={t("settings.nextCategory")}
                         >
                           <ChevronRight size={16} />
@@ -603,14 +603,14 @@ export function SettingsPage() {
                             onClick={() => setActiveConfigCategory(group.category)}
                             className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
                               active
-                                ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950"
+                                ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-violet-400/45 dark:bg-violet-500/18 dark:text-violet-100"
+                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950 dark:border-slate-700 dark:bg-[#151f33] dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
                             }`}
                           >
                             <span>{group.category}</span>
                             <span
                               className={`rounded-full px-1.5 py-0.5 text-[11px] ${
-                                active ? "bg-white text-indigo-600" : "bg-slate-100 text-slate-500"
+                                active ? "bg-white text-indigo-600 dark:bg-[#0b1220] dark:text-violet-100" : "bg-slate-100 text-slate-500 dark:bg-[#0b1220] dark:text-slate-400"
                               }`}
                             >
                               {index + 1}/{groupedItems.length}
@@ -624,11 +624,11 @@ export function SettingsPage() {
                   <section
                     id="settings-category-panel"
                     role="tabpanel"
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50"
+                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-black/20"
                   >
-                    <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-                      <h2 className="text-sm font-semibold text-slate-950">{activeGroup.category}</h2>
-                      <p className="mt-1 text-xs text-slate-500">{t("settings.itemCount", { count: activeGroup.items.length })}</p>
+                    <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4 dark:border-slate-800 dark:bg-[#151f33]">
+                      <h2 className="text-sm font-semibold text-slate-950 dark:text-white">{activeGroup.category}</h2>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t("settings.itemCount", { count: activeGroup.items.length })}</p>
                     </div>
                     <div className={activeGroup.category === "图片工具参数" ? "grid gap-3 p-5 sm:grid-cols-2" : "px-5"}>
                       {activeGroup.items.map((item) => (
@@ -653,34 +653,34 @@ export function SettingsPage() {
                   </section>
                 </>
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500 dark:border-slate-700/80 dark:bg-[#0f1726] dark:text-slate-400">
                   {t("settings.empty")}
                 </div>
               )}
 
               {error ? (
-                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">{error}</div>
               ) : null}
               {savedMessage ? (
-                <div className="flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                <div className="flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/10 dark:text-emerald-200">
                   <CheckCircle2 size={16} className="mr-2" /> {savedMessage}
                 </div>
               ) : null}
 
-              <div className="sticky bottom-0 -mx-6 border-t border-zinc-200 bg-white/90 px-6 py-4 backdrop-blur">
+              <div className="sticky bottom-0 -mx-6 border-t border-zinc-200 bg-white/90 px-6 py-4 backdrop-blur dark:border-slate-800 dark:bg-[#060a12]/88">
                 <div className="mx-auto flex max-w-5xl justify-end gap-3">
                   <button
                     type="button"
                     onClick={handleDiscardDrafts}
                     disabled={configQuery.isFetching}
-                    className="px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 disabled:opacity-50"
+                    className="px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 disabled:opacity-50 dark:text-slate-300 dark:hover:text-white"
                   >
                     {configQuery.isFetching ? t("settings.restoring") : t("settings.discard")}
                   </button>
                   <button
                     type="submit"
                     disabled={saveMutation.isPending}
-                    className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                    className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:opacity-50 dark:bg-gradient-to-r dark:from-indigo-500 dark:to-violet-500 dark:shadow-violet-900/35 dark:ring-1 dark:ring-violet-300/35"
                   >
                     {saveMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Save size={14} className="mr-2" />}
                     {t("settings.save")}

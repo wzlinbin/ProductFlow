@@ -8,10 +8,11 @@ import type { ProductWorkflow, WorkflowRun, WorkflowRunStatus } from "../../lib/
 import { outputText } from "./utils";
 
 const RUN_STATUS_CLASS_NAMES: Record<WorkflowRunStatus, string> = {
-  running: "border-blue-200 bg-blue-50 text-blue-700",
-  succeeded: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  failed: "border-red-200 bg-red-50 text-red-700",
-  cancelled: "border-zinc-200 bg-zinc-50 text-zinc-600",
+  running: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/35 dark:bg-blue-500/12 dark:text-blue-200",
+  succeeded:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-200",
+  failed: "border-red-200 bg-red-50 text-red-700 dark:border-red-400/35 dark:bg-red-500/12 dark:text-red-200",
+  cancelled: "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300",
 };
 
 const RUN_STATUS_DOT_CLASS_NAMES: Record<WorkflowRunStatus, string> = {
@@ -73,11 +74,11 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-zinc-500 dark:text-slate-400">
           {workflow?.runs.length ? t("detail.runsCount", { count: workflow.runs.length }) : t("detail.noRunHistory")}
         </div>
         {latestRun ? (
-          <div className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] text-zinc-500">
+          <div className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300">
             {t("detail.latest", { time: formatDateTime(latestRun.started_at) })}
           </div>
         ) : null}
@@ -91,7 +92,7 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
             return (
               <div
                 key={run.id}
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-xs shadow-sm"
+                className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-xs shadow-sm dark:border-slate-700/80 dark:bg-[#151f33] dark:shadow-black/20"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-3">
@@ -105,8 +106,8 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
                         >
                           {t(`detail.runStatus.${run.status}`)}
                         </span>
-                        <span className="inline-flex items-center text-[11px] text-zinc-500">
-                          <Layers3 size={12} className="mr-1 text-zinc-400" />
+                        <span className="inline-flex items-center text-[11px] text-zinc-500 dark:text-slate-400">
+                          <Layers3 size={12} className="mr-1 text-zinc-400 dark:text-slate-500" />
                           {t("detail.nodeRunCount", { count: run.node_runs.length })}
                         </span>
                       </div>
@@ -123,7 +124,7 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
                                   meta: formatDateTime(run.started_at),
                                 })
                               }
-                              className="inline-flex max-w-full items-center rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                              className="inline-flex max-w-full items-center rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-violet-400/50 dark:hover:bg-violet-500/12 dark:hover:text-violet-100"
                             >
                               <FileText size={12} className="mr-1 shrink-0" />
                               <span className="truncate">{item.title}</span>
@@ -135,17 +136,17 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
                         <div
                           className={`mt-2 line-clamp-2 rounded-lg border px-2.5 py-1.5 ${
                             run.status === "cancelled"
-                              ? "border-zinc-100 bg-zinc-50 text-zinc-600"
-                              : "border-red-100 bg-red-50 text-red-700"
+                              ? "border-zinc-100 bg-zinc-50 text-zinc-600 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300"
+                              : "border-red-100 bg-red-50 text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200"
                           }`}
                         >
                           {run.failure_reason}
                         </div>
                       ) : null}
-                      {queueText ? <div className="mt-2 text-[11px] leading-5 text-zinc-500">{queueText}</div> : null}
+                      {queueText ? <div className="mt-2 text-[11px] leading-5 text-zinc-500 dark:text-slate-400">{queueText}</div> : null}
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-2 text-right text-[10px] leading-relaxed text-zinc-400">
+                  <div className="flex shrink-0 flex-col items-end gap-2 text-right text-[10px] leading-relaxed text-zinc-400 dark:text-slate-500">
                     <div>
                       <div>{formatDateTime(run.started_at)}</div>
                       {run.finished_at ? <div>{t("detail.finished", { time: formatDateTime(run.finished_at) })}</div> : null}
@@ -156,7 +157,7 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
                           type="button"
                           onClick={() => onRetryRun(run)}
                           disabled={runBusy}
-                          className="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
+                          className="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-60 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-red-400/50 dark:hover:bg-red-500/12 dark:hover:text-red-200"
                         >
                           {runBusy ? (
                             <Loader2 size={12} className="mr-1 animate-spin" />
@@ -174,7 +175,7 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
           })}
         </div>
       ) : (
-        <div className="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-4 py-6 text-center text-xs text-zinc-500">
+        <div className="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-4 py-6 text-center text-xs text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400">
           {t("detail.noRuns")}
         </div>
       )}

@@ -129,7 +129,7 @@ export function ProductListPage() {
           </div>
 
           {deleteError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
               {deleteError}
             </div>
           ) : null}
@@ -139,7 +139,7 @@ export function ProductListPage() {
               <Loader2 size={20} className="animate-spin" />
             </div>
           ) : productsQuery.isError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
               {t("products.loadFailed")}
             </div>
           ) : products.length ? (

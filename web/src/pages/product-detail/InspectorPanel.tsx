@@ -162,7 +162,7 @@ export function InspectorPanel({
               {displayTitle}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:border-zinc-200 dark:bg-white dark:text-zinc-700">
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300">
                 {displayLabel}
               </span>
               <span
@@ -322,11 +322,11 @@ export function InspectorPanel({
         ) : null}
       </section>
       {node.failure_reason ? (
-        <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs leading-relaxed text-red-700 shadow-sm">
+        <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs leading-relaxed text-red-700 shadow-sm dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
           <AlertCircle size={13} className="mr-1.5 inline" />
           {node.failure_reason}
           {!runActionState.disabled && node.node_type !== "product_context" ? (
-            <div className="mt-2 font-semibold text-red-700">{t("detail.inspector.retryableCurrent")}</div>
+            <div className="mt-2 font-semibold text-red-700 dark:text-red-100">{t("detail.inspector.retryableCurrent")}</div>
           ) : null}
         </section>
       ) : null}
@@ -365,11 +365,11 @@ function ProductContextInspector({
             <DownloadLink image={sourceImage} variant="overlay" />
           </>
         ) : (
-          <div className="text-xs text-zinc-400">{t("detail.inspector.noSourceImage")}</div>
+          <div className="text-xs text-zinc-400 dark:text-slate-500">{t("detail.inspector.noSourceImage")}</div>
         )}
       </div>
       <label className="block">
-        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
           {t("detail.inspector.productName")}
         </span>
         <input
@@ -377,12 +377,12 @@ function ProductContextInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, productName: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
         />
       </label>
       <div className="grid grid-cols-2 gap-2">
         <label className="block">
-          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
             {t("detail.inspector.category")}
           </span>
           <input
@@ -390,11 +390,11 @@ function ProductContextInspector({
             onChange={(event) =>
               onDraftChange({ ...draft, category: event.target.value })
             }
-            className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+            className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
             {t("detail.inspector.price")}
           </span>
           <input
@@ -402,7 +402,7 @@ function ProductContextInspector({
             onChange={(event) =>
               onDraftChange({ ...draft, price: event.target.value })
             }
-            className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+            className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
           />
         </label>
       </div>
@@ -411,7 +411,7 @@ function ProductContextInspector({
         value={draft.sourceNote}
         onChange={(value) => onDraftChange({ ...draft, sourceNote: value })}
       />
-      <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400">
         {t("detail.inspector.originalProduct", { name: product.name })}
         {product.category ? ` · ${product.category}` : ""}
         {product.price ? ` · ${formatPrice(product.price)}` : ""}
@@ -464,7 +464,7 @@ function ReferenceImageInspector({
         </div>
       ) : null}
       <label className="block">
-        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
           {t("detail.inspector.label")}
         </span>
         <input
@@ -472,11 +472,11 @@ function ReferenceImageInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, label: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
         />
       </label>
       <label className="block">
-        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
           {t("detail.inspector.role")}
         </span>
         <select
@@ -484,7 +484,7 @@ function ReferenceImageInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, role: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
         >
           {REFERENCE_ROLE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -496,7 +496,7 @@ function ReferenceImageInspector({
       <ImageDropZone
         ariaLabel={hasImage ? t("detail.inspector.replaceReference") : t("detail.inspector.uploadReference")}
         disabled={busy}
-        className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 px-3 py-6 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50"
+        className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 px-3 py-6 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
         onFiles={(files) => {
           const file = files[0];
           if (file) {
@@ -542,7 +542,7 @@ function CopyNodeInspector({
         onChange={(value) => onDraftChange({ ...draft, instruction: value })}
       />
       <label className="block">
-        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
           {t("detail.inspector.tone")}
         </span>
         <input
@@ -550,11 +550,11 @@ function CopyNodeInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, tone: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
         />
       </label>
       <label className="block">
-        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
           {t("detail.inspector.channel")}
         </span>
         <input
@@ -562,12 +562,12 @@ function CopyNodeInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, channel: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
         />
       </label>
       {hasCopy ? (
-        <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+        <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-slate-700 dark:bg-[#0b1220]">
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
             {t("detail.inspector.editCopy")}
           </div>
           {copyPayload ? (
@@ -577,7 +577,7 @@ function CopyNodeInspector({
               t={t}
             />
           ) : null}
-          <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500">
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500 dark:border-slate-700 dark:bg-[#151f33] dark:text-slate-400">
             {t("detail.inspector.copyAutosave")}
           </div>
         </div>
@@ -670,7 +670,7 @@ function StructuredCopyEditor({
 
 function CopyBlockEditor({ block, onChange, t }: { block: CopyBlock; onChange: (block: CopyBlock) => void; t: TFunction }) {
   return (
-    <div className="space-y-2 rounded-md border border-zinc-200 bg-white p-3">
+    <div className="space-y-2 rounded-md border border-zinc-200 bg-white p-3 dark:border-slate-700 dark:bg-[#151f33]">
       <OptionalTextInput
         label={t("detail.inspector.label")}
         value={block.label ?? ""}
@@ -698,7 +698,7 @@ function CopyBlockEditor({ block, onChange, t }: { block: CopyBlock; onChange: (
 
 function CopySectionEditor({ section, onChange, t }: { section: CopySection; onChange: (section: CopySection) => void; t: TFunction }) {
   return (
-    <div className="space-y-2 rounded-md border border-zinc-200 bg-white p-3">
+    <div className="space-y-2 rounded-md border border-zinc-200 bg-white p-3 dark:border-slate-700 dark:bg-[#151f33]">
       <OptionalTextInput
         label={t("detail.inspector.sectionTitle")}
         value={section.title ?? ""}
@@ -715,7 +715,7 @@ function CopySectionEditor({ section, onChange, t }: { section: CopySection; onC
       />
       {section.items.length ? (
         <div className="space-y-1.5">
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
             {t("detail.inspector.items")}
           </div>
           <div className="space-y-1.5">
@@ -747,7 +747,7 @@ function CopySectionEditor({ section, onChange, t }: { section: CopySection; onC
 
 function CopySectionItemEditor({ block, onChange, t }: { block: CopyBlock; onChange: (block: CopyBlock) => void; t: TFunction }) {
   return (
-    <div className="space-y-1.5 border-l border-zinc-200 pl-2.5">
+    <div className="space-y-1.5 border-l border-zinc-200 pl-2.5 dark:border-slate-700">
       <OptionalTextInput
         label={t("detail.inspector.label")}
         value={block.label ?? ""}
@@ -804,7 +804,7 @@ function OptionalTextInput({
 
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+      <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
         {label}
       </span>
       <input
@@ -816,7 +816,7 @@ function OptionalTextInput({
           }
         }}
         placeholder={placeholder}
-        className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+        className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400"
       />
     </label>
   );
@@ -901,7 +901,7 @@ function ImageGenerationInspector({
   return (
     <div className="space-y-3">
       {downstreamReferenceCount === 0 ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
           {t("detail.inspector.connectImageNodeFirst")}
         </div>
       ) : null}
@@ -910,15 +910,15 @@ function ImageGenerationInspector({
         onChange={setSettingsTab}
         basic={
           <div className="space-y-3">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-[#0b1220]">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold text-slate-700">{t("detail.inspector.generationCount")}</div>
-                  <div className="mt-1 text-[11px] leading-5 text-slate-500">
+                  <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">{t("detail.inspector.generationCount")}</div>
+                  <div className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
                     {t("detail.inspector.downstreamImageCount", { count: downstreamReferenceCount })}
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-[#151f33] dark:text-slate-200">
                   {t("detail.inspector.imageCount", { count: downstreamReferenceCount })}
                 </span>
               </div>
@@ -938,7 +938,7 @@ function ImageGenerationInspector({
                     meta: promptMeta,
                   })
                 }
-                className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
               >
                 <FileText size={13} className="mr-1.5" />
                 {t("detail.inspector.reviewPrompt")}

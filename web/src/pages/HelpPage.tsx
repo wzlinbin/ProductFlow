@@ -1293,11 +1293,11 @@ function searchDocPages(queryText: string, pages: DocPage[]): SearchResult[] {
 
 function renderBlock(block: SectionBlock) {
   if (block.type === "paragraph") {
-    return <p className="text-[15px] leading-7 text-slate-700">{block.text}</p>;
+    return <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">{block.text}</p>;
   }
   if (block.type === "list") {
     return (
-      <ul className="list-disc space-y-2 pl-5 text-[15px] leading-7 text-slate-700">
+      <ul className="list-disc space-y-2 pl-5 text-[15px] leading-7 text-slate-700 dark:text-slate-300">
         {block.items.map((item) => (
           <li key={item}>{item}</li>
         ))}
@@ -1308,8 +1308,8 @@ function renderBlock(block: SectionBlock) {
     return (
       <ol className="space-y-3">
         {block.items.map((item, index) => (
-          <li key={item} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 text-[15px] leading-7 text-slate-700">
-            <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600">
+          <li key={item} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 text-[15px] leading-7 text-slate-700 dark:text-slate-300">
+            <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600 dark:border-violet-400/35 dark:bg-violet-500/15 dark:text-violet-100">
               {index + 1}
             </span>
             <span>{item}</span>
@@ -1320,19 +1320,19 @@ function renderBlock(block: SectionBlock) {
   }
   if (block.type === "table") {
     return (
-      <div className="overflow-hidden rounded-lg border border-slate-200">
+      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700/80">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-slate-50 text-slate-600">
+          <thead className="bg-slate-50 text-slate-600 dark:bg-[#151f33] dark:text-slate-300">
             <tr>
-              <th className="w-[32%] border-b border-slate-200 px-4 py-3 font-semibold">{block.headers[0]}</th>
-              <th className="border-b border-slate-200 px-4 py-3 font-semibold">{block.headers[1]}</th>
+              <th className="w-[32%] border-b border-slate-200 px-4 py-3 font-semibold dark:border-slate-700/80">{block.headers[0]}</th>
+              <th className="border-b border-slate-200 px-4 py-3 font-semibold dark:border-slate-700/80">{block.headers[1]}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 dark:bg-[#0f1726]">
             {block.rows.map(([left, right]) => (
               <tr key={`${left}-${right}`}>
-                <td className="px-4 py-3 font-medium text-slate-950">{left}</td>
-                <td className="px-4 py-3 leading-6 text-slate-700">{right}</td>
+                <td className="px-4 py-3 font-medium text-slate-950 dark:text-slate-100">{left}</td>
+                <td className="px-4 py-3 leading-6 text-slate-700 dark:text-slate-300">{right}</td>
               </tr>
             ))}
           </tbody>
@@ -1342,15 +1342,15 @@ function renderBlock(block: SectionBlock) {
   }
   if (block.type === "code") {
     return (
-      <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-950 px-4 py-3 text-sm leading-6 text-slate-100">
+      <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-950 px-4 py-3 text-sm leading-6 text-slate-100 dark:border-slate-700/80 dark:bg-[#060a12]">
         <code>{block.text}</code>
       </pre>
     );
   }
   return (
-    <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 px-4 py-3">
-      <div className="text-sm font-semibold text-indigo-900">{block.title}</div>
-      <p className="mt-1 text-sm leading-6 text-indigo-900/80">{block.text}</p>
+    <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 px-4 py-3 dark:border-violet-400/35 dark:bg-violet-500/14">
+      <div className="text-sm font-semibold text-indigo-900 dark:text-violet-100">{block.title}</div>
+      <p className="mt-1 text-sm leading-6 text-indigo-900/80 dark:text-slate-300">{block.text}</p>
     </div>
   );
 }
@@ -1378,35 +1378,35 @@ export function HelpPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col bg-white dark:bg-[#060a12] dark:text-slate-100">
       <TopNav breadcrumbs={t("help.breadcrumb")} onHome={() => navigate("/products")} />
 
       <main className="mx-auto grid w-full max-w-[1440px] flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_220px]">
-        <aside className="border-b border-slate-200 bg-slate-50/70 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
-          <div className="border-b border-slate-200 px-5 py-5">
+        <aside className="border-b border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-[#0f1726] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+          <div className="border-b border-slate-200 px-5 py-5 dark:border-slate-800">
             <button
               type="button"
               onClick={() => openPage("overview")}
-              className="flex items-center gap-2 text-left text-base font-semibold text-slate-950"
+              className="flex items-center gap-2 text-left text-base font-semibold text-slate-950 dark:text-white"
             >
-              <BookOpen size={18} className="text-indigo-600" />
+              <BookOpen size={18} className="text-indigo-600 dark:text-violet-300" />
               {t("help.title")}
             </button>
             <div className="relative mt-4">
               <label htmlFor="help-search" className="sr-only">
                 {t("help.search")}
               </label>
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input
                 id="help-search"
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder={t("help.search")}
-                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400/20"
               />
               {normalizedSearchQuery ? (
-                <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+                <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700/80 dark:bg-[#151f33] dark:shadow-black/30">
                   {searchResults.length > 0 ? (
                     <div className="max-h-[360px] overflow-y-auto py-1">
                       {searchResults.map((result) => (
@@ -1414,25 +1414,25 @@ export function HelpPage() {
                           key={result.page.slug}
                           type="button"
                           onClick={() => openPage(result.page.slug)}
-                          className="block w-full px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
+                          className="block w-full px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-violet-500/12"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                            <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-500 dark:border-slate-700 dark:text-slate-400">
                               {result.page.category}
                             </span>
-                            <span className="min-w-0 truncate text-sm font-semibold text-slate-950">
+                            <span className="min-w-0 truncate text-sm font-semibold text-slate-950 dark:text-white">
                               {result.page.title}
                             </span>
                           </div>
                           {result.matchedSectionTitle ? (
-                            <div className="mt-1 text-xs font-medium text-indigo-700">{result.matchedSectionTitle}</div>
+                            <div className="mt-1 text-xs font-medium text-indigo-700 dark:text-violet-200">{result.matchedSectionTitle}</div>
                           ) : null}
-                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{result.preview}</p>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600 dark:text-slate-400">{result.preview}</p>
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="px-3 py-3 text-sm text-slate-500">{t("help.noSearchResults")}</div>
+                    <div className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">{t("help.noSearchResults")}</div>
                   )}
                 </div>
               ) : null}
@@ -1442,7 +1442,7 @@ export function HelpPage() {
           <nav className="hidden space-y-6 px-3 py-5 lg:block" aria-label={t("help.nav")}>
             {navGroups.map((group) => (
               <div key={group.title}>
-                <div className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.title}</div>
+                <div className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{group.title}</div>
                 <div className="mt-2 space-y-1">
                   {group.pages.map((slug) => {
                     const item = pagesBySlug.get(slug);
@@ -1459,11 +1459,11 @@ export function HelpPage() {
                         aria-current={active ? "page" : undefined}
                         className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
                           active
-                            ? "bg-white font-semibold text-indigo-700 shadow-sm ring-1 ring-slate-200"
-                            : "text-slate-600 hover:bg-white hover:text-slate-950"
+                            ? "bg-white font-semibold text-indigo-700 shadow-sm ring-1 ring-slate-200 dark:bg-violet-500/18 dark:text-violet-100 dark:ring-violet-400/35"
+                            : "text-slate-600 hover:bg-white hover:text-slate-950 dark:text-slate-300 dark:hover:bg-violet-500/12 dark:hover:text-white"
                         }`}
                       >
-                        <Icon size={15} className={active ? "text-indigo-600" : "text-slate-400"} />
+                        <Icon size={15} className={active ? "text-indigo-600 dark:text-violet-200" : "text-slate-400 dark:text-slate-500"} />
                         <span className="min-w-0 truncate">{item.title}</span>
                       </button>
                     );
@@ -1474,14 +1474,14 @@ export function HelpPage() {
           </nav>
 
           <div className="p-4 lg:hidden">
-            <label htmlFor="doc-page" className="mb-2 block text-xs font-semibold text-slate-500">
+            <label htmlFor="doc-page" className="mb-2 block text-xs font-semibold text-slate-500 dark:text-slate-400">
               {t("help.pageSelect")}
             </label>
             <select
               id="doc-page"
               value={page.slug}
               onChange={(event) => openPage(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100"
             >
               {navGroups.map((group) => (
                 <optgroup key={group.title} label={group.title}>
@@ -1499,38 +1499,38 @@ export function HelpPage() {
           </div>
         </aside>
 
-        <article className="min-w-0 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
+        <article className="min-w-0 bg-white px-5 py-8 dark:bg-[#0b1220] sm:px-8 lg:px-12 lg:py-12">
           <header className="max-w-3xl">
-            <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-500">
+            <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
               <span>{page.category}</span>
               <ChevronRight size={14} />
               <span>{page.title}</span>
             </div>
-            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-indigo-600">
+            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-indigo-600 dark:border-violet-400/35 dark:bg-violet-500/15 dark:text-violet-100">
               <PageIcon size={20} />
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{page.title}</h1>
-            <p className="mt-4 text-base leading-7 text-slate-600">{page.description}</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl">{page.title}</h1>
+            <p className="mt-4 text-base leading-7 text-slate-600 dark:text-slate-300">{page.description}</p>
           </header>
 
           <div className="mt-10 max-w-3xl space-y-10">
             {page.sections.map((section) => (
               <section key={section.id} id={section.id} className="scroll-mt-6">
-                <h2 className="text-xl font-semibold tracking-tight text-slate-950">{section.title}</h2>
+                <h2 className="text-xl font-semibold tracking-tight text-slate-950 dark:text-white">{section.title}</h2>
                 <div className="mt-4 space-y-4">{section.blocks.map((block, index) => <div key={index}>{renderBlock(block)}</div>)}</div>
               </section>
             ))}
           </div>
 
-          <footer className="mt-12 grid max-w-3xl gap-3 border-t border-slate-200 pt-6 sm:grid-cols-2">
+          <footer className="mt-12 grid max-w-3xl gap-3 border-t border-slate-200 pt-6 dark:border-slate-800 sm:grid-cols-2">
             {previousPage ? (
               <button
                 type="button"
                 onClick={() => openPage(previousPage.slug)}
-                className="rounded-lg border border-slate-200 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:bg-[#0f1726] dark:hover:bg-violet-500/12"
               >
-                <div className="text-xs font-medium text-slate-500">{t("help.previous")}</div>
-                <div className="mt-1 text-sm font-semibold text-slate-950">{previousPage.title}</div>
+                <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{t("help.previous")}</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950 dark:text-white">{previousPage.title}</div>
               </button>
             ) : (
               <div />
@@ -1539,10 +1539,10 @@ export function HelpPage() {
               <button
                 type="button"
                 onClick={() => openPage(nextPage.slug)}
-                className="rounded-lg border border-slate-200 px-4 py-3 text-left transition-colors hover:bg-slate-50 sm:text-right"
+                className="rounded-lg border border-slate-200 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:bg-[#0f1726] dark:hover:bg-violet-500/12 sm:text-right"
               >
-                <div className="text-xs font-medium text-slate-500">{t("help.next")}</div>
-                <div className="mt-1 inline-flex items-center text-sm font-semibold text-indigo-700">
+                <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{t("help.next")}</div>
+                <div className="mt-1 inline-flex items-center text-sm font-semibold text-indigo-700 dark:text-violet-200">
                   {nextPage.title}
                   <ArrowRight size={14} className="ml-1" />
                 </div>
@@ -1551,37 +1551,37 @@ export function HelpPage() {
           </footer>
         </article>
 
-        <aside className="hidden border-l border-slate-200 px-5 py-12 lg:block">
+        <aside className="hidden border-l border-slate-200 bg-slate-50/70 px-5 py-12 dark:border-slate-800 dark:bg-[#0f1726] lg:block">
           <div className="sticky top-8">
-            <div className="text-sm font-semibold text-slate-950">{t("help.onThisPage")}</div>
+            <div className="text-sm font-semibold text-slate-950 dark:text-white">{t("help.onThisPage")}</div>
             <nav className="mt-3 space-y-2" aria-label={t("help.onThisPage")}>
               {page.sections.map((section) => (
                 <a
                   key={section.id}
                   href={`#${section.id}`}
-                  className="block border-l border-slate-200 pl-3 text-sm leading-5 text-slate-500 transition-colors hover:border-indigo-400 hover:text-slate-950"
+                  className="block border-l border-slate-200 pl-3 text-sm leading-5 text-slate-500 transition-colors hover:border-indigo-400 hover:text-slate-950 dark:border-slate-700 dark:text-slate-400 dark:hover:border-violet-400 dark:hover:text-white"
                 >
                   {section.title}
                 </a>
               ))}
             </nav>
-            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <CircleHelp size={15} className="text-indigo-600" />
+            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-[#151f33]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-white">
+                <CircleHelp size={15} className="text-indigo-600 dark:text-violet-300" />
                 {t("help.needAction")}
               </div>
               <div className="mt-3 grid gap-2">
                 <button
                   type="button"
                   onClick={() => navigate("/products")}
-                  className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-violet-500 dark:hover:bg-violet-400"
                 >
                   {t("help.openProducts")}
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/image-chat")}
-                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:text-slate-950"
+                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:text-slate-950 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:bg-violet-500/12 dark:hover:text-white"
                 >
                   {t("help.openImageChat")}
                 </button>

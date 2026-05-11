@@ -353,7 +353,7 @@ export function TemplateGroupsPanel({
 
   if (isError) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
         {t("detail.template.loadFailed")}
       </div>
     );
@@ -443,22 +443,22 @@ export function TemplateGroupsPanel({
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
                   {isUserTemplate ? (
-                    <span className="rounded-sm border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 dark:border-zinc-200 dark:bg-white dark:text-zinc-700">
+                    <span className="rounded-sm border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 dark:border-slate-600 dark:bg-[#0b1220] dark:text-slate-300">
                       {t("detail.template.custom")}
                     </span>
                   ) : null}
-                  <span className="max-w-full truncate rounded-sm border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-100 dark:bg-emerald-50 dark:text-emerald-700">
+                  <span className="max-w-full truncate rounded-sm border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-200">
                     {summarizeOutput(displayTemplate, t)}
                   </span>
                   {referenceLabel ? (
-                    <span className="max-w-full truncate rounded-sm border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 dark:border-zinc-200 dark:bg-white dark:text-zinc-700">
+                    <span className="max-w-full truncate rounded-sm border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 dark:border-slate-600 dark:bg-[#0b1220] dark:text-slate-300">
                       {referenceLabel}
                     </span>
                   ) : null}
                   {externalLabels.map((label) => (
                     <span
                       key={label}
-                      className="max-w-full truncate rounded-sm border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 dark:border-indigo-100 dark:bg-indigo-50 dark:text-indigo-700"
+                      className="max-w-full truncate rounded-sm border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 dark:border-violet-400/35 dark:bg-violet-500/14 dark:text-violet-100"
                     >
                       {label}
                     </span>
@@ -485,7 +485,7 @@ export function TemplateGroupsPanel({
                       type="button"
                       onClick={() => onArchiveUserTemplate(template)}
                       disabled={userTemplateBusy}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/16"
                       aria-label={t("detail.template.delete")}
                       title={t("detail.template.delete")}
                     >

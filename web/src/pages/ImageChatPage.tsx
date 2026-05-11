@@ -1111,17 +1111,17 @@ export function ImageChatPage() {
               )}
             </div>
             {selectedRound?.provider_notes.length ? (
-              <div className="mt-2 flex flex-wrap gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <div className="mt-2 flex flex-wrap gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
                 {selectedRound.provider_notes.map((note) => (
                   <span key={note}>{note}</span>
                 ))}
               </div>
             ) : selectedPlaceholder?.failure_reason ? (
-              <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
                 {selectedPlaceholder.failure_reason}
               </div>
             ) : selectedPlaceholder?.provider_notes.length ? (
-              <div className="mt-2 flex flex-wrap gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <div className="mt-2 flex flex-wrap gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
                 {selectedPlaceholder.provider_notes.map((note) => (
                   <span key={note}>{note}</span>
                 ))}
@@ -1311,19 +1311,19 @@ export function ImageChatPage() {
 
             <div className="space-y-4">
               {successMessage ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/10 dark:text-emerald-200">
                   {successMessage}
                 </div>
               ) : null}
               {errorMessage ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</div>
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">{errorMessage}</div>
               ) : null}
             </div>
           </div>
 
           <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_24px_rgba(15,23,42,0.10)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-[0_-18px_40px_rgba(0,0,0,0.32)] lg:sticky lg:inset-x-auto lg:bottom-0 lg:p-4">
             {baseRequirementMessage ? (
-              <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+              <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
                 {baseRequirementMessage}
               </div>
             ) : null}
@@ -1381,7 +1381,9 @@ function GenerationCanvasPlaceholder({
       <div className="flex max-w-md flex-col items-center text-center">
         <div
           className={`relative flex h-24 w-24 items-center justify-center rounded-3xl border shadow-sm ${
-            failed ? "border-red-200 bg-red-50 text-red-600" : "border-indigo-100 bg-indigo-50 text-indigo-700"
+            failed
+              ? "border-red-200 bg-red-50 text-red-600 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200"
+              : "border-indigo-100 bg-indigo-50 text-indigo-700 dark:border-violet-400/35 dark:bg-violet-500/14 dark:text-violet-100"
           }`}
         >
           {active ? <div className="absolute inset-2 rounded-3xl bg-indigo-200/70 opacity-70 blur-xl animate-pulse" /> : null}
@@ -1400,7 +1402,7 @@ function GenerationCanvasPlaceholder({
             type="button"
             onClick={() => onCancel(candidate.task)}
             disabled={cancelling}
-            className="mt-5 inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60"
+            className="mt-5 inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-400/40 dark:bg-[#0b1220] dark:text-red-200 dark:hover:bg-red-500/12"
           >
             {cancelling ? <Loader2 size={15} className="mr-2 animate-spin" /> : <OctagonX size={15} className="mr-2" />}
             {t("chat.cancelGeneration")}
@@ -1417,7 +1419,7 @@ function GenerationCanvasPlaceholder({
             {t("chat.retryGeneration")}
           </button>
         ) : failed ? (
-          <div className="mt-5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-500">
+          <div className="mt-5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-500 dark:border-red-400/40 dark:bg-[#0b1220] dark:text-red-200">
             {t("chat.notRetryable")}
           </div>
         ) : cancelled ? (

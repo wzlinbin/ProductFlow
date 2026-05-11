@@ -1077,7 +1077,7 @@ export function ProductDetailPage() {
 
   if (productQuery.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white text-zinc-400 dark:bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-white text-zinc-400 dark:bg-[#060a12] dark:text-slate-400">
         <Loader2 size={24} className="animate-spin" />
       </div>
     );
@@ -1085,8 +1085,8 @@ export function ProductDetailPage() {
 
   if (productQuery.isError || !productQuery.data) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-slate-950">
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-[#060a12]">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
           {t("detail.loadFailed")}
         </div>
       </div>
@@ -1169,17 +1169,17 @@ export function ProductDetailPage() {
 
       <main className="flex min-h-0 flex-1 flex-col border-t border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-[#060a12]">
         {error ? (
-          <div className="z-20 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+          <div className="z-20 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">
             <AlertCircle size={14} className="mr-2 inline" /> {error}
           </div>
         ) : null}
         {!error && notice ? (
-          <div className="z-20 border-b border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700">
+          <div className="z-20 border-b border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700 dark:border-blue-400/35 dark:bg-blue-500/10 dark:text-blue-200">
             <AlertCircle size={14} className="mr-2 inline" /> {notice}
           </div>
         ) : null}
         {showQueueOverview && queueOverview ? (
-          <div className="z-20 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <div className="z-20 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
             {t("detail.queueOverview", {
               running: queueOverview.running_count,
               queued: queueOverview.queued_count,
@@ -1392,7 +1392,7 @@ export function ProductDetailPage() {
                       type="button"
                       onClick={handleDeleteSelectedNodes}
                       disabled={deleteSelectedNodesMutation.isPending || structureBusy}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100"
                     >
                       {deleteSelectedNodesMutation.isPending ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -1404,7 +1404,7 @@ export function ProductDetailPage() {
                     <button
                       type="button"
                       onClick={clearMultiSelection}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100"
                       aria-label={t("detail.clearSelection")}
                       title={t("detail.clearSelection")}
                     >

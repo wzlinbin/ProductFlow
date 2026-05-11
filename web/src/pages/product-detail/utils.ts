@@ -65,7 +65,7 @@ export function configString(
 
 export function statusClass(status: WorkflowNode["status"]): string {
   return {
-    idle: "border-zinc-200 bg-white text-zinc-500 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200",
+    idle: "border-zinc-200 bg-white text-zinc-500 dark:border-slate-600 dark:bg-[#0b1220] dark:text-slate-200",
     queued: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-100",
     running: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/40 dark:bg-blue-500/15 dark:text-blue-100",
     succeeded: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-300/50 dark:bg-emerald-400/15 dark:text-emerald-50",

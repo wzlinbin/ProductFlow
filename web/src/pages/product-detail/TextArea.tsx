@@ -40,7 +40,7 @@ export function TextArea({
 
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+      <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
         {label}
       </span>
       <textarea
@@ -51,7 +51,7 @@ export function TextArea({
         placeholder={placeholder}
         rows={minRows}
         style={{ minHeight }}
-        className="w-full resize-none rounded-md border border-zinc-200 px-3 py-2 text-xs leading-relaxed outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+        className="w-full resize-none rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs leading-relaxed text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400"
       />
     </label>
   );

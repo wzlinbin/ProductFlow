@@ -24,7 +24,7 @@ function AppRoutes() {
 
   if (sessionQuery.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white text-zinc-400 dark:bg-slate-950 dark:text-slate-500">
+      <div className="flex min-h-screen items-center justify-center bg-white text-zinc-400 dark:bg-[#060a12] dark:text-slate-400">
         <Loader2 size={24} className="animate-spin" />
         <span className="sr-only">{t("app.loading")}</span>
       </div>
@@ -90,7 +90,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <PreferencesProvider>
         <BrowserRouter>
-          <div className="min-h-screen bg-white font-sans text-zinc-900 selection:bg-zinc-200 dark:bg-slate-950 dark:text-slate-100 dark:selection:bg-indigo-500/30">
+          <div className="min-h-screen bg-white font-sans text-zinc-900 selection:bg-zinc-200 dark:bg-[#060a12] dark:text-slate-100 dark:selection:bg-indigo-500/30">
             <AppRoutes />
           </div>
         </BrowserRouter>
