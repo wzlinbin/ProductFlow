@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from dramatiq.middleware.time_limit import TimeLimitExceeded
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -55,7 +56,7 @@ from productflow_backend.domain.enums import (
     WorkflowNodeType,
     WorkflowRunStatus,
 )
-from productflow_backend.domain.errors import BusinessValidationError, NotFoundError
+from productflow_backend.domain.errors import BusinessError, BusinessValidationError, NotFoundError
 from productflow_backend.domain.workflow_rules import (
     WorkflowRuleEdge,
     WorkflowRuleNode,
@@ -76,6 +77,8 @@ from productflow_backend.infrastructure.queue import enqueue_workflow_run
 from productflow_backend.infrastructure.storage import LocalStorage
 
 logger = logging.getLogger(__name__)
+
+COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -669,7 +672,7 @@ def _execute_copy_generation(
     )
     config = config.model_copy(update={"instruction": instruction})
     provider = dependencies.text_provider()
-    brief_payload, brief_model = provider.generate_brief(product_input)
+    brief_payload, brief_model = _generate_brief_with_provider(provider, product_input, node_id=node.id)
     brief = CreativeBrief(
         product_id=product.id,
         payload=brief_payload.model_dump(),
@@ -686,6 +689,7 @@ def _execute_copy_generation(
         brief_payload,
         config=config,
         reference_images=reference_images,
+        node_id=node.id,
     )
     structured_payload = copy_payload.model_dump(mode="json")
     copy_set = CopySet(
@@ -712,6 +716,19 @@ def _execute_copy_generation(
     return output
 
 
+def _generate_brief_with_provider(
+    provider: Any,
+    product_input: ProductInput,
+    *,
+    node_id: str,
+) -> tuple[Any, str]:
+    return _call_text_provider_with_payload_retry(
+        lambda: provider.generate_brief(product_input),
+        operation="brief",
+        node_id=node_id,
+    )
+
+
 def _generate_copy_with_provider(
     provider: Any,
     product_input: ProductInput,
@@ -719,11 +736,43 @@ def _generate_copy_with_provider(
     *,
     config: Any,
     reference_images: list[Any],
+    node_id: str | None = None,
 ) -> tuple[Any, str]:
-    copy_payload, model_name = provider.generate_copy(
-        product_input,
-        brief_payload,
-        config=config,
-        reference_images=reference_images,
+    def generate_once() -> tuple[Any, str]:
+        copy_payload, model_name = provider.generate_copy(
+            product_input,
+            brief_payload,
+            config=config,
+            reference_images=reference_images,
+        )
+        return normalize_copy_payload(copy_payload.model_dump(mode="json"), fallback_purpose=config.purpose), model_name
+
+    return _call_text_provider_with_payload_retry(
+        generate_once,
+        operation="copy",
+        node_id=node_id,
     )
-    return normalize_copy_payload(copy_payload.model_dump(mode="json"), fallback_purpose=config.purpose), model_name
+
+
+def _call_text_provider_with_payload_retry(
+    call: Callable[[], tuple[Any, str]],
+    *,
+    operation: str,
+    node_id: str | None,
+) -> tuple[Any, str]:
+    for attempt in range(1, COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS + 1):
+        try:
+            return call()
+        except (ValidationError, ValueError) as exc:
+            if isinstance(exc, BusinessError) or attempt >= COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS:
+                raise
+            logger.warning(
+                "文案 provider 返回字段不匹配，准备重试: operation=%s node_id=%s attempt=%s max_attempts=%s "
+                "error_class=%s",
+                operation,
+                node_id,
+                attempt,
+                COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS,
+                exc.__class__.__name__,
+            )
+    raise RuntimeError("unreachable text provider retry state")

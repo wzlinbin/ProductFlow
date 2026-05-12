@@ -591,6 +591,97 @@ def test_product_workflow_copy_run_normalizes_provider_scalar_lists(configured_e
     latest_brief = product_response.json()["latest_brief"]
     assert latest_brief["payload"]["audience"] == "摄影入门用户、小红书图文内容创作者"
 
+
+def test_product_workflow_copy_run_retries_provider_payload_contract_mismatch(
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RetryingTextProvider:
+        provider_name = "retrying-text"
+        prompt_version = "test-v1"
+        brief_attempts = 0
+        copy_attempts = 0
+
+        def generate_brief(self, product: ProductInput) -> tuple[CreativeBriefPayload, str]:
+            type(self).brief_attempts += 1
+            if type(self).brief_attempts == 1:
+                return CreativeBriefPayload.model_validate(
+                    {
+                        "positioning": f"{product.name} 定位",
+                        "audience": [],
+                        "selling_angles": ["轻", "稳", "好收纳"],
+                        "taboo_phrases": [],
+                        "poster_style_hint": "清爽",
+                    }
+                ), "bad-brief"
+            return (
+                CreativeBriefPayload(
+                    positioning=f"{product.name} 便携定位",
+                    audience="小户型用户",
+                    selling_angles=["轻", "稳", "好收纳"],
+                    taboo_phrases=[],
+                    poster_style_hint="清爽真实",
+                ),
+                "good-brief",
+            )
+
+        def generate_copy(
+            self,
+            product: ProductInput,
+            brief: CreativeBriefPayload,
+            config: CopyNodeConfigV2,
+            reference_images: list[ReferenceImageInput] | None = None,
+        ) -> tuple[CopyPayloadV2, str]:
+            del product, brief, config, reference_images
+            type(self).copy_attempts += 1
+            if type(self).copy_attempts == 1:
+                return CopyPayloadV2.model_validate(
+                    {
+                        "version": 2,
+                        "summary": " ",
+                        "content": {"kind": "freeform", "text": "第一次字段不匹配"},
+                    }
+                ), "bad-copy"
+            return (
+                CopyPayloadV2(
+                    summary="轻巧稳固，随手收纳",
+                    content=FreeformCopyContent(text="轻巧稳固，适合小户型日常收纳。"),
+                ),
+                "good-copy",
+            )
+
+    _execute_workflow_queue_inline(
+        monkeypatch,
+        dependencies=WorkflowExecutionDependencies(
+            text_provider_resolver=lambda: RetryingTextProvider(),
+        ),
+    )
+
+    from productflow_backend.presentation.api import create_app
+
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+
+    created = client.post(
+        "/api/products",
+        data={"name": "折叠置物架"},
+        files={"image": ("shelf.png", _make_demo_image_bytes(), "image/png")},
+    )
+    assert created.status_code == 201
+    product_id = created.json()["id"]
+
+    run_response = client.post(f"/api/products/{product_id}/workflow/run", json={})
+    assert run_response.status_code == 200
+    workflow_payload = _wait_for_workflow_run(client, product_id, status="succeeded")
+    copy_node = next(node for node in workflow_payload["nodes"] if node["node_type"] == "copy_generation")
+
+    assert RetryingTextProvider.brief_attempts == 2
+    assert RetryingTextProvider.copy_attempts == 2
+    assert copy_node["output_json"]["summary"] == "文案：轻巧稳固，随手收纳"
+    assert copy_node["output_json"]["structured_payload"]["summary"] == "轻巧稳固，随手收纳"
+
+
 def test_mock_image_provider_does_not_read_runtime_settings_during_generation(
     configured_env: Path,
     monkeypatch: pytest.MonkeyPatch,
