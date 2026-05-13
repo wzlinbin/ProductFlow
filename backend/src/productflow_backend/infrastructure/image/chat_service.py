@@ -20,6 +20,10 @@ from productflow_backend.infrastructure.image.responses_provider import (
     decode_reference_data_url,
 )
 from productflow_backend.infrastructure.prompts import render_prompt_template
+from productflow_backend.infrastructure.provider_config import (
+    ResolvedImageProviderConfig,
+    resolve_image_provider_config,
+)
 
 
 @dataclass(slots=True)
@@ -58,9 +62,10 @@ class ImageChatService:
     provider_name = "image-session"
     prompt_version = "responses-image-session-v1"
 
-    def __init__(self) -> None:
+    def __init__(self, provider_config: ResolvedImageProviderConfig | None = None) -> None:
         settings = get_runtime_settings()
-        self.provider_kind = settings.image_provider_kind
+        self.provider_config = provider_config or resolve_image_provider_config()
+        self.provider_kind = self.provider_config.provider_kind
         self.prompt_template = settings.prompt_image_chat_template
 
     def generate(
@@ -170,7 +175,7 @@ class ImageChatService:
         tool_options: dict | None,
         progress_callback: Callable[[dict[str, Any]], None] | None,
     ) -> GeneratedChatImage:
-        client = OpenAIResponsesImageClient()
+        client = OpenAIResponsesImageClient(self.provider_config)
         history_for_prompt = [] if previous_response_id else history
         history_for_images = [] if previous_response_id else history
         result = client.generate_image(
@@ -242,7 +247,7 @@ class ImageChatService:
         history: list[ImageChatTurn],
         manual_reference_images: list[str],
     ) -> GeneratedChatImage:
-        client = OpenAIImagesClient()
+        client = OpenAIImagesClient(self.provider_config)
         full_prompt = self._build_prompt(prompt=prompt, history=history, size=size)
 
         reference_images = self._collect_images_api_references(history, manual_reference_images)

@@ -60,6 +60,47 @@ class AppSetting(Base, TimestampMixin):
     value: Mapped[str] = mapped_column(Text)
 
 
+class ProviderProfile(Base, TimestampMixin):
+    """统一供应商档案，持有连接信息和可用能力。"""
+
+    __tablename__ = "provider_profiles"
+    __table_args__ = (
+        Index("ix_provider_profiles_enabled", "enabled"),
+        Index("ix_provider_profiles_archived_at", "archived_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(120))
+    provider_type: Mapped[str] = mapped_column(String(40), default="openai_compatible")
+    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    capabilities_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    default_models_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProviderBinding(Base, TimestampMixin):
+    """用途绑定，表达文案/图片当前使用哪个供应商和接口。"""
+
+    __tablename__ = "provider_bindings"
+    __table_args__ = (Index("uq_provider_bindings_purpose", "purpose", unique=True),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_profile_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("provider_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model_settings_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    provider_profile: Mapped[ProviderProfile | None] = relationship()
+
+
 class UserCanvasTemplate(Base, TimestampMixin):
     """用户保存的可复用画布节点组模板。"""
 

@@ -20,12 +20,28 @@ from productflow_backend.config import (
     parse_image_tool_allowed_fields,
 )
 from productflow_backend.infrastructure.db.models import AppSetting
+from productflow_backend.infrastructure.provider_config import (
+    UNSET_PROVIDER_FIELD,
+    archive_provider_profile,
+    create_provider_profile,
+    ensure_provider_config_bootstrapped,
+    list_provider_bindings,
+    list_provider_profiles,
+    update_provider_binding,
+    update_provider_profile,
+)
 from productflow_backend.presentation.deps import get_session, require_admin
 from productflow_backend.presentation.schemas.settings import (
     ConfigItemResponse,
     ConfigOptionResponse,
     ConfigResponse,
     ConfigUpdateRequest,
+    ProviderBindingResponse,
+    ProviderBindingUpdateRequest,
+    ProviderConfigResponse,
+    ProviderProfileCreateRequest,
+    ProviderProfileResponse,
+    ProviderProfileUpdateRequest,
     RuntimeConfigResponse,
     SettingsLockStateResponse,
     SettingsUnlockRequest,
@@ -101,6 +117,43 @@ def _serialize_config(session: Session) -> ConfigResponse:
     return ConfigResponse(items=items)
 
 
+def _serialize_provider_profile(profile) -> ProviderProfileResponse:
+    return ProviderProfileResponse(
+        id=profile.id,
+        name=profile.name,
+        provider_type=profile.provider_type,
+        base_url=profile.base_url,
+        capabilities=list(profile.capabilities_json or []),
+        default_models=dict(profile.default_models_json or {}),
+        config=dict(profile.config_json or {}),
+        enabled=profile.enabled,
+        archived_at=profile.archived_at.isoformat() if profile.archived_at is not None else None,
+        has_api_key=bool(profile.api_key),
+        created_at=profile.created_at.isoformat(),
+        updated_at=profile.updated_at.isoformat(),
+    )
+
+
+def _serialize_provider_binding(binding) -> ProviderBindingResponse:
+    return ProviderBindingResponse(
+        id=binding.id,
+        purpose=binding.purpose,
+        provider_kind=binding.provider_kind,
+        provider_profile_id=binding.provider_profile_id,
+        model_settings=dict(binding.model_settings_json or {}),
+        config=dict(binding.config_json or {}),
+        created_at=binding.created_at.isoformat(),
+        updated_at=binding.updated_at.isoformat(),
+    )
+
+
+def _serialize_provider_config(session: Session) -> ProviderConfigResponse:
+    return ProviderConfigResponse(
+        profiles=[_serialize_provider_profile(profile) for profile in list_provider_profiles(session)],
+        bindings=[_serialize_provider_binding(binding) for binding in list_provider_bindings(session)],
+    )
+
+
 @router.get("/lock-state", response_model=SettingsLockStateResponse)
 def get_settings_lock_state_endpoint(request: Request) -> SettingsLockStateResponse:
     configured = _settings_token_configured()
@@ -124,6 +177,113 @@ def unlock_settings_endpoint(payload: SettingsUnlockRequest, request: Request) -
 @router.get("", response_model=ConfigResponse, dependencies=[Depends(require_settings_unlocked)])
 def get_config_endpoint(session: Session = Depends(get_session)) -> ConfigResponse:
     return _serialize_config(session)
+
+
+@router.get(
+    "/provider-config",
+    response_model=ProviderConfigResponse,
+    dependencies=[Depends(require_settings_unlocked)],
+)
+def get_provider_config_endpoint(session: Session = Depends(get_session)) -> ProviderConfigResponse:
+    ensure_provider_config_bootstrapped(session)
+    return _serialize_provider_config(session)
+
+
+@router.post(
+    "/provider-profiles",
+    response_model=ProviderProfileResponse,
+    dependencies=[Depends(require_settings_unlocked)],
+)
+def create_provider_profile_endpoint(
+    payload: ProviderProfileCreateRequest,
+    session: Session = Depends(get_session),
+) -> ProviderProfileResponse:
+    try:
+        ensure_provider_config_bootstrapped(session)
+        profile = create_provider_profile(
+            session,
+            name=payload.name,
+            base_url=payload.base_url,
+            api_key=payload.api_key,
+            capabilities=payload.capabilities,
+            default_models=payload.default_models,
+            config=payload.config,
+            enabled=payload.enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize_provider_profile(profile)
+
+
+@router.patch(
+    "/provider-profiles/{profile_id}",
+    response_model=ProviderProfileResponse,
+    dependencies=[Depends(require_settings_unlocked)],
+)
+def update_provider_profile_endpoint(
+    profile_id: str,
+    payload: ProviderProfileUpdateRequest,
+    session: Session = Depends(get_session),
+) -> ProviderProfileResponse:
+    try:
+        ensure_provider_config_bootstrapped(session)
+        fields_set = payload.model_fields_set
+        profile = update_provider_profile(
+            session,
+            profile_id,
+            name=payload.name,
+            base_url=payload.base_url if "base_url" in fields_set else UNSET_PROVIDER_FIELD,
+            api_key=payload.api_key if "api_key" in fields_set else UNSET_PROVIDER_FIELD,
+            capabilities=payload.capabilities,
+            default_models=payload.default_models,
+            config=payload.config,
+            enabled=payload.enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize_provider_profile(profile)
+
+
+@router.delete(
+    "/provider-profiles/{profile_id}",
+    response_model=ProviderProfileResponse,
+    dependencies=[Depends(require_settings_unlocked)],
+)
+def archive_provider_profile_endpoint(
+    profile_id: str,
+    session: Session = Depends(get_session),
+) -> ProviderProfileResponse:
+    try:
+        ensure_provider_config_bootstrapped(session)
+        profile = archive_provider_profile(session, profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize_provider_profile(profile)
+
+
+@router.patch(
+    "/provider-bindings/{purpose}",
+    response_model=ProviderBindingResponse,
+    dependencies=[Depends(require_settings_unlocked)],
+)
+def update_provider_binding_endpoint(
+    purpose: str,
+    payload: ProviderBindingUpdateRequest,
+    session: Session = Depends(get_session),
+) -> ProviderBindingResponse:
+    try:
+        ensure_provider_config_bootstrapped(session)
+        binding = update_provider_binding(
+            session,
+            purpose=purpose,
+            provider_kind=payload.provider_kind,
+            provider_profile_id=payload.provider_profile_id,
+            model_settings=payload.model_settings,
+            config=payload.config,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize_provider_binding(binding)
 
 
 @router.get("/runtime", response_model=RuntimeConfigResponse)

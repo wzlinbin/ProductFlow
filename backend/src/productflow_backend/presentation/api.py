@@ -16,6 +16,10 @@ from productflow_backend.infrastructure.logging import (
     reset_request_id,
     set_request_id,
 )
+from productflow_backend.infrastructure.provider_config import (
+    ensure_provider_config_bootstrapped,
+    provider_config_tables_available,
+)
 from productflow_backend.infrastructure.queue import (
     recover_unfinished_image_session_generation_tasks,
     recover_unfinished_workflow_runs,
@@ -40,6 +44,8 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         cleanup_old_logs(settings)
+        if provider_config_tables_available():
+            ensure_provider_config_bootstrapped()
         recover_unfinished_workflow_runs()
         recover_unfinished_image_session_generation_tasks()
         yield

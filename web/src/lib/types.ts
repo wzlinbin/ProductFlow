@@ -604,3 +604,65 @@ export interface SettingsLockState {
   unlocked: boolean;
   configured: boolean;
 }
+
+export type ProviderCapability = "text_responses" | "image_responses" | "image_images";
+export type ProviderPurpose = "text" | "image";
+export type ProviderType = "openai_compatible";
+
+export interface ProviderProfile {
+  id: string;
+  name: string;
+  provider_type: ProviderType;
+  base_url: string | null;
+  capabilities: ProviderCapability[];
+  default_models: Record<string, unknown>;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  archived_at: string | null;
+  has_api_key: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderProfileCreateRequest {
+  name: string;
+  base_url?: string | null;
+  api_key?: string | null;
+  capabilities: ProviderCapability[];
+  default_models?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface ProviderProfileUpdateRequest {
+  name?: string | null;
+  base_url?: string | null;
+  api_key?: string | null;
+  capabilities?: ProviderCapability[] | null;
+  default_models?: Record<string, unknown> | null;
+  config?: Record<string, unknown> | null;
+  enabled?: boolean | null;
+}
+
+export interface ProviderBinding {
+  id: string;
+  purpose: ProviderPurpose;
+  provider_kind: string;
+  provider_profile_id: string | null;
+  model_settings: Record<string, unknown>;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderBindingUpdateRequest {
+  provider_kind: string;
+  provider_profile_id?: string | null;
+  model_settings?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+}
+
+export interface ProviderConfigResponse {
+  profiles: ProviderProfile[];
+  bindings: ProviderBinding[];
+}

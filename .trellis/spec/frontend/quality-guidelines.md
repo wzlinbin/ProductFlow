@@ -147,6 +147,22 @@ Current pages show loading, error, disabled, and success states close to the act
 
 Follow this style for new actions.
 
+### Keep settings/admin workspaces theme-complete and locale-complete
+
+Settings, admin, and operational workspaces must be designed and reviewed as light/dark paired surfaces, not as a
+single-theme mock copied into both modes.
+
+- Light mode should remain a first-class surface: neutral page background, white or near-white panels, readable slate/zinc
+  text, and visible but restrained borders.
+- Dark mode may use deep navy/slate surfaces and violet/indigo accents, but every explicit light background, border,
+  placeholder, muted text, hover state, and alert state needs a matching `dark:*` variant.
+- Every new visible UI label, placeholder, button, section heading, status message, and aria label must use
+  `web/src/lib/i18n.ts` keys for both `zh-CN` and `en-US`.
+- Provider names, model IDs, API keys, URLs, filenames, backend `ApiError.detail`, and operator-authored content stay as
+  source data and should not be translated.
+- Configuration pages should keep app-style density: fixed or sticky navigation, one active working panel, explicit field
+  labels, and save/error feedback near the changed section.
+
 ### Keep desktop-only layout state bounded
 
 When adding resizable panels to a desktop-only layout:

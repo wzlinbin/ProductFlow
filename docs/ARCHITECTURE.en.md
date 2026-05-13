@@ -164,7 +164,9 @@ Image providers live under `infrastructure/image/` and serve poster generation a
 - `openai_responses` (Responses API `image_generation` tool, supporting `input_image`; iterative image generation prefers background response + retrieve polling and writes provider status into task progress)
 - `openai_images` (Images API `images.generate` / `images.edit` compatible interface; it does not use Responses `previous_response_id`, and ProductFlow explicitly sends the selected base image plus references for iterative image sessions)
 
-Provider selection is controlled by `config.py` and corresponding factories. Routes do not directly depend on concrete SDKs.
+Provider selection is controlled by `provider_profiles`, `provider_bindings`, and corresponding factories. Legacy
+`TEXT_*` / `IMAGE_*` environment values are only first-migration input; runtime resolvers read interface kind,
+connection data, and models from provider profiles and purpose bindings. Routes do not directly depend on concrete SDKs.
 
 ## 7. Poster Generation
 

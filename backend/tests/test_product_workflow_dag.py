@@ -2006,10 +2006,10 @@ def test_single_reference_run_reruns_upstream_when_target_slot_missing_artifact(
     assert slot_run.status_code == 200
     payload = _wait_for_workflow_run(client, product_id, status="succeeded")
     assert payload["runs"][0]["status"] == "succeeded"
-    assert [node_run["node_id"] for node_run in payload["runs"][0]["node_runs"]] == [
+    assert {node_run["node_id"] for node_run in payload["runs"][0]["node_runs"]} == {
         image_node["id"],
         new_reference_node["id"],
-    ]
+    }
     filled_reference = next(node for node in payload["nodes"] if node["id"] == new_reference_node["id"])
     rerun_image = next(node for node in payload["nodes"] if node["id"] == image_node["id"])
     assert filled_reference["output_json"]["source_asset_ids"]

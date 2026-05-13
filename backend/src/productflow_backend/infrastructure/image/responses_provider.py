@@ -28,6 +28,10 @@ from productflow_backend.infrastructure.image.base import (
     parse_size,
 )
 from productflow_backend.infrastructure.prompts import render_prompt_template
+from productflow_backend.infrastructure.provider_config import (
+    ResolvedImageProviderConfig,
+    resolve_image_provider_config,
+)
 
 IMAGE_TOOL_OPTIONAL_FIELD_KEYS = IMAGE_TOOL_FIELD_KEYS
 RESPONSES_BACKGROUND_POLL_INTERVAL_SECONDS = 2.0
@@ -203,12 +207,13 @@ class OpenAIResponsesImageClient:
     provider_name = "openai-responses"
     prompt_version = "responses-image-generation-v1"
 
-    def __init__(self) -> None:
+    def __init__(self, provider_config: ResolvedImageProviderConfig | None = None) -> None:
         settings = get_runtime_settings()
-        self.api_key = settings.image_api_key
-        self.base_url = settings.image_base_url
-        self.model = settings.image_generate_model
-        self.background_enabled = settings.image_responses_background_enabled
+        resolved_config = provider_config or resolve_image_provider_config()
+        self.api_key = resolved_config.api_key
+        self.base_url = resolved_config.base_url
+        self.model = resolved_config.model
+        self.background_enabled = resolved_config.responses_background_enabled
         self.tool_model = settings.image_tool_model
         self.tool_quality = settings.image_tool_quality
         self.tool_output_format = settings.image_tool_output_format
@@ -232,7 +237,7 @@ class OpenAIResponsesImageClient:
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> ResponsesImageResult:
         if not self.api_key:
-            raise RuntimeError("图片供应商缺少 IMAGE_API_KEY")
+            raise RuntimeError("图片供应商档案缺少 API Key")
 
         reference_images = reference_images or []
         tool = self._build_image_generation_tool(size, tool_options=tool_options)
@@ -717,15 +722,16 @@ class OpenAIResponsesImageProvider(ImageProvider):
     provider_name = OpenAIResponsesImageClient.provider_name
     prompt_version = OpenAIResponsesImageClient.prompt_version
 
-    def __init__(self) -> None:
+    def __init__(self, provider_config: ResolvedImageProviderConfig | None = None) -> None:
         settings = get_runtime_settings()
-        self.model = settings.image_generate_model
+        self.provider_config = provider_config or resolve_image_provider_config()
+        self.model = self.provider_config.model
         self.main_image_size = settings.image_main_image_size
         self.promo_poster_size = settings.image_promo_poster_size
         self.poster_image_template = settings.prompt_poster_image_template
         self.poster_image_edit_template = settings.prompt_poster_image_edit_template
         self.poster_image_reference_policy = settings.prompt_poster_image_reference_policy
-        self.client = OpenAIResponsesImageClient()
+        self.client = OpenAIResponsesImageClient(self.provider_config)
 
     def generate_poster_image(
         self,

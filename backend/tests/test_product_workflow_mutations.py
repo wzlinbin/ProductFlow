@@ -133,6 +133,7 @@ def test_product_workflow_status_endpoint_returns_lightweight_state(configured_e
         "started_at",
         "finished_at",
         "failure_reason",
+        "progress_metadata",
         "is_retryable",
         "is_cancelable",
         "queue_active_count",

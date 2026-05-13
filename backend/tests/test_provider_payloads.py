@@ -961,6 +961,7 @@ def test_openai_responses_poster_provider_uses_image_generation_tool(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1053,6 +1054,7 @@ def test_openai_responses_image_tool_optional_fields_are_omitted_until_configure
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1149,6 +1151,7 @@ def test_openai_responses_image_client_polls_background_response_and_reports_pro
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
     monkeypatch.setenv("IMAGE_RESPONSES_BACKGROUND_ENABLED", "true")
@@ -1221,6 +1224,7 @@ def test_openai_responses_image_client_falls_back_when_background_is_unsupported
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
     monkeypatch.setenv("IMAGE_RESPONSES_BACKGROUND_ENABLED", "true")
@@ -1272,6 +1276,7 @@ def test_openai_responses_image_client_wraps_background_poll_errors(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
     monkeypatch.setenv("IMAGE_RESPONSES_BACKGROUND_ENABLED", "true")
@@ -1345,6 +1350,7 @@ def test_openai_responses_image_client_redacts_base_url_credentials_in_logs(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://user:secret-pass@example.test/v1?token=secret-token")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1386,6 +1392,7 @@ def test_openai_responses_image_client_retries_without_optional_fields_and_recor
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1447,6 +1454,7 @@ def test_openai_responses_image_client_records_provider_adjusted_note(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1505,6 +1513,7 @@ def test_openai_responses_image_client_sanitizes_client_initialization_errors(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://secret-provider.example/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "sk-sensitive")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1531,6 +1540,7 @@ def test_openai_responses_image_client_infers_mime_type_from_returned_bytes(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")
@@ -1642,6 +1652,7 @@ def test_openai_images_client_retries_generate_without_optional_fields(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_images")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-image-1")
     monkeypatch.setenv("IMAGE_IMAGES_QUALITY", "high")
@@ -1683,6 +1694,7 @@ def test_openai_images_client_edit_sends_multiple_images_and_falls_back_to_base_
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_images")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-image-1")
     monkeypatch.setenv("IMAGE_IMAGES_QUALITY", "high")
@@ -1745,6 +1757,7 @@ def test_openai_images_client_reports_missing_output_and_sanitizes_failures(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_images")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://secret-provider.example/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "sk-sensitive")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-image-1")
@@ -1786,6 +1799,7 @@ def test_openai_images_poster_provider_uses_existing_prompt_contract_and_referen
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_images")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-image-1")
     get_settings.cache_clear()
@@ -1945,6 +1959,7 @@ def test_openai_responses_image_client_reports_completed_text_without_image(
     configured_env: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_responses")
     monkeypatch.setenv("IMAGE_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
     monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-5.4")

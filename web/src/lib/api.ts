@@ -17,6 +17,12 @@ import type {
   ImageToolOptions,
   ProductDetail,
   ProductHistory,
+  ProviderBinding,
+  ProviderBindingUpdateRequest,
+  ProviderConfigResponse,
+  ProviderProfile,
+  ProviderProfileCreateRequest,
+  ProviderProfileUpdateRequest,
   ProductWorkflow,
   ProductWorkflowStatus,
   ProductWritebackResponse,
@@ -104,6 +110,30 @@ export const api = {
   },
   getConfig(): Promise<ConfigResponse> {
     return request("/api/settings");
+  },
+  getProviderConfig(): Promise<ProviderConfigResponse> {
+    return request("/api/settings/provider-config");
+  },
+  createProviderProfile(payload: ProviderProfileCreateRequest): Promise<ProviderProfile> {
+    return request("/api/settings/provider-profiles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  updateProviderProfile(profileId: string, payload: ProviderProfileUpdateRequest): Promise<ProviderProfile> {
+    return request(`/api/settings/provider-profiles/${profileId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  archiveProviderProfile(profileId: string): Promise<ProviderProfile> {
+    return request(`/api/settings/provider-profiles/${profileId}`, { method: "DELETE" });
+  },
+  updateProviderBinding(purpose: "text" | "image", payload: ProviderBindingUpdateRequest): Promise<ProviderBinding> {
+    return request(`/api/settings/provider-bindings/${purpose}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
   },
   getSettingsLockState(): Promise<SettingsLockState> {
     return request("/api/settings/lock-state");

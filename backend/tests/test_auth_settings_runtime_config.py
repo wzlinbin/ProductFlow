@@ -8,6 +8,7 @@ from helpers import (
     _login,
     _unlock_settings,
 )
+from sqlalchemy import select
 
 from productflow_backend.config import (
     CONFIG_DEFINITION_BY_KEY,
@@ -18,8 +19,14 @@ from productflow_backend.config import (
 )
 from productflow_backend.infrastructure.db.models import (
     AppSetting,
+    ProviderBinding,
+    ProviderProfile,
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
+from productflow_backend.infrastructure.provider_config import (
+    resolve_image_provider_config,
+    resolve_text_provider_config,
+)
 
 
 def test_auth_session_required(configured_env: Path) -> None:
@@ -196,14 +203,20 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
     initial = client.get("/api/settings")
     assert initial.status_code == 200
     initial_items = {item["key"]: item for item in initial.json()["items"]}
-    assert initial_items["image_provider_kind"]["value"] == "mock"
-    assert initial_items["image_provider_kind"]["source"] == "env_default"
-    assert initial_items["image_provider_kind"]["updated_at"] is None
-    assert [option["value"] for option in initial_items["image_provider_kind"]["options"]] == [
-        "mock",
-        "openai_responses",
-        "openai_images",
-    ]
+    assert {
+        "text_provider_kind",
+        "text_api_key",
+        "text_base_url",
+        "text_brief_model",
+        "text_copy_model",
+        "image_provider_kind",
+        "image_api_key",
+        "image_base_url",
+        "image_generate_model",
+        "image_images_quality",
+        "image_images_style",
+        "image_responses_background_enabled",
+    }.isdisjoint(initial_items)
     assert initial_items["generation_max_concurrent_tasks"]["value"] == 3
     assert initial_items["image_session_stale_running_after_minutes"]["value"] == 90
     assert initial_items["image_session_stale_running_after_minutes"]["category"] == "生成队列"
@@ -223,11 +236,6 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
         "/api/settings",
         json={
             "values": {
-                "image_provider_kind": "openai_responses",
-                "image_api_key": "database-image-key",
-                "image_generate_model": "gpt-5.4-mini",
-                "image_images_quality": "auto",
-                "image_images_style": "natural",
                 "generation_max_concurrent_tasks": 2,
                 "image_session_stale_running_after_minutes": 75,
                 "workflow_image_generation_provider_timeout_seconds": 120,
@@ -236,17 +244,6 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
         },
     )
     assert updated.status_code == 200
-    updated_items = {item["key"]: item for item in updated.json()["items"]}
-    assert updated_items["image_provider_kind"]["value"] == "openai_responses"
-    assert updated_items["image_provider_kind"]["source"] == "database"
-    assert updated_items["image_provider_kind"]["updated_at"] is not None
-    assert updated_items["image_api_key"]["value"] == ""
-    assert updated_items["image_api_key"]["has_value"] is True
-    assert updated_items["image_api_key"]["updated_at"] is not None
-    assert get_runtime_settings().image_provider_kind == "openai_responses"
-    assert get_runtime_settings().image_api_key == "database-image-key"
-    assert get_runtime_settings().image_images_quality == "auto"
-    assert get_runtime_settings().image_images_style == "natural"
     assert get_runtime_settings().generation_max_concurrent_tasks == 2
     assert get_runtime_settings().image_session_stale_running_after_minutes == 75
     assert get_runtime_settings().workflow_image_generation_provider_timeout_seconds == 120
@@ -254,9 +251,6 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
 
     session = get_session_factory()()
     try:
-        assert session.get(AppSetting, "image_provider_kind").value == "openai_responses"
-        assert session.get(AppSetting, "image_images_quality").value == "auto"
-        assert session.get(AppSetting, "image_images_style").value == "natural"
         assert session.get(AppSetting, "image_session_stale_running_after_minutes").value == "75"
         assert session.get(AppSetting, "workflow_image_generation_provider_timeout_seconds").value == "120"
     finally:
@@ -276,37 +270,452 @@ def test_settings_api_persists_database_overrides(configured_env: Path) -> None:
     assert invalid_workflow_timeout.status_code == 400
     assert "不能小于 1" in invalid_workflow_timeout.json()["detail"]
 
-    reset = client.patch("/api/settings", json={"reset_keys": ["image_provider_kind"]})
-    assert reset.status_code == 200
-    reset_items = {item["key"]: item for item in reset.json()["items"]}
-    assert reset_items["image_provider_kind"]["value"] == "mock"
-    assert reset_items["image_provider_kind"]["source"] == "env_default"
+    legacy_provider_update = client.patch("/api/settings", json={"values": {"image_provider_kind": "openai_images"}})
+    assert legacy_provider_update.status_code == 400
+    assert "未知配置项: image_provider_kind" in legacy_provider_update.json()["detail"]
 
-    cleared_images_api_options = client.patch(
-        "/api/settings",
-        json={"values": {"image_images_quality": "", "image_images_style": ""}},
+
+def test_provider_bootstrap_runs_on_app_startup(configured_env: Path) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    session = get_session_factory()()
+    try:
+        session.add_all(
+            [
+                AppSetting(key="text_provider_kind", value="openai"),
+                AppSetting(key="text_api_key", value="shared-key"),
+                AppSetting(key="text_base_url", value="http://localhost:3000/v1"),
+                AppSetting(key="image_provider_kind", value="openai_responses"),
+                AppSetting(key="image_api_key", value="shared-key"),
+                AppSetting(key="image_base_url", value="http://localhost:3000/v1"),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    app = create_app()
+    with TestClient(app):
+        session = get_session_factory()()
+        try:
+            profiles = session.scalars(select(ProviderProfile)).all()
+            bindings = session.scalars(select(ProviderBinding)).all()
+        finally:
+            session.close()
+
+    assert len(profiles) == 1
+    assert set(profiles[0].capabilities_json) == {"text_responses", "image_responses"}
+    assert {binding.purpose for binding in bindings} == {"text", "image"}
+
+
+def test_provider_bootstrap_merges_matching_legacy_text_and_image_config(configured_env: Path) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    session = get_session_factory()()
+    try:
+        session.add_all(
+            [
+                AppSetting(key="text_provider_kind", value="openai"),
+                AppSetting(key="text_api_key", value="shared-key"),
+                AppSetting(key="text_base_url", value="http://localhost:3000/v1"),
+                AppSetting(key="text_brief_model", value="brief-model"),
+                AppSetting(key="text_copy_model", value="copy-model"),
+                AppSetting(key="image_provider_kind", value="openai_images"),
+                AppSetting(key="image_api_key", value="shared-key"),
+                AppSetting(key="image_base_url", value="http://localhost:3000/v1"),
+                AppSetting(key="image_generate_model", value="gpt-image-2"),
+                AppSetting(key="image_images_quality", value="high"),
+                AppSetting(key="image_images_style", value="natural"),
+                AppSetting(key="image_responses_background_enabled", value="false"),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+    _unlock_settings(client)
+
+    response = client.get("/api/settings/provider-config")
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["profiles"]) == 1
+    profile = payload["profiles"][0]
+    assert profile["base_url"] == "http://localhost:3000/v1"
+    assert profile["has_api_key"] is True
+    assert "shared-key" not in str(payload)
+    assert set(profile["capabilities"]) == {"text_responses", "image_images"}
+    bindings = {binding["purpose"]: binding for binding in payload["bindings"]}
+    assert bindings["text"]["provider_kind"] == "openai"
+    assert bindings["text"]["provider_profile_id"] == profile["id"]
+    assert bindings["text"]["model_settings"] == {"brief_model": "brief-model", "copy_model": "copy-model"}
+    assert bindings["image"]["provider_kind"] == "openai_images"
+    assert bindings["image"]["provider_profile_id"] == profile["id"]
+    assert bindings["image"]["model_settings"] == {"model": "gpt-image-2"}
+    assert bindings["image"]["config"] == {
+        "images_quality": "high",
+        "images_style": "natural",
+    }
+
+    assert client.get("/api/settings/provider-config").json()["profiles"] == payload["profiles"]
+
+    text_config = resolve_text_provider_config()
+    assert text_config.provider_kind == "openai"
+    assert text_config.api_key == "shared-key"
+    assert text_config.base_url == "http://localhost:3000/v1"
+    assert text_config.brief_model == "brief-model"
+    assert text_config.copy_model == "copy-model"
+
+    image_config = resolve_image_provider_config()
+    assert image_config.provider_kind == "openai_images"
+    assert image_config.api_key == "shared-key"
+    assert image_config.base_url == "http://localhost:3000/v1"
+    assert image_config.model == "gpt-image-2"
+    assert image_config.images_quality == "high"
+    assert image_config.images_style == "natural"
+    assert image_config.responses_background_enabled is False
+
+
+def test_provider_bootstrap_splits_different_legacy_connections(configured_env: Path) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    session = get_session_factory()()
+    try:
+        session.add_all(
+            [
+                AppSetting(key="text_provider_kind", value="openai"),
+                AppSetting(key="text_api_key", value="text-key"),
+                AppSetting(key="text_base_url", value="https://text.example/v1"),
+                AppSetting(key="image_provider_kind", value="openai_responses"),
+                AppSetting(key="image_api_key", value="image-key"),
+                AppSetting(key="image_base_url", value="https://image.example/v1"),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+    _unlock_settings(client)
+
+    response = client.get("/api/settings/provider-config")
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["profiles"]) == 2
+    profiles_by_base_url = {profile["base_url"]: profile for profile in payload["profiles"]}
+    assert set(profiles_by_base_url["https://text.example/v1"]["capabilities"]) == {"text_responses"}
+    assert set(profiles_by_base_url["https://image.example/v1"]["capabilities"]) == {"image_responses"}
+    bindings = {binding["purpose"]: binding for binding in payload["bindings"]}
+    assert bindings["text"]["provider_profile_id"] == profiles_by_base_url["https://text.example/v1"]["id"]
+    assert bindings["image"]["provider_profile_id"] == profiles_by_base_url["https://image.example/v1"]["id"]
+
+
+def test_provider_config_api_masks_keys_preserves_blank_update_and_validates_bindings(configured_env: Path) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+    _unlock_settings(client)
+
+    initial = client.get("/api/settings/provider-config")
+    assert initial.status_code == 200
+    initial_payload = initial.json()
+    assert initial_payload["profiles"] == []
+    assert {binding["purpose"]: binding["provider_kind"] for binding in initial_payload["bindings"]} == {
+        "image": "mock",
+        "text": "mock",
+    }
+
+    created = client.post(
+        "/api/settings/provider-profiles",
+        json={
+            "name": "本地 3000 网关",
+            "base_url": "http://localhost:3000/v1",
+            "api_key": "chatgpt2api",
+            "capabilities": ["text_responses", "image_responses", "image_images"],
+            "default_models": {"brief_model": "gpt-4.1", "copy_model": "gpt-4.1", "image_model": "gpt-image-2"},
+            "config": {},
+            "enabled": True,
+        },
     )
-    assert cleared_images_api_options.status_code == 200
-    assert get_runtime_settings().image_images_quality is None
-    assert get_runtime_settings().image_images_style is None
+    assert created.status_code == 200
+    profile = created.json()
+    profile_id = profile["id"]
+    assert profile["has_api_key"] is True
+    assert "chatgpt2api" not in str(profile)
 
-    invalid_images_quality = client.patch("/api/settings", json={"values": {"image_images_quality": "ultra"}})
-    assert invalid_images_quality.status_code == 400
-    assert "Images API Quality 必须是以下之一" in invalid_images_quality.json()["detail"]
+    updated_blank_key = client.patch(
+        f"/api/settings/provider-profiles/{profile_id}",
+        json={
+            "name": "本地 3000 网关",
+            "base_url": None,
+            "api_key": "",
+            "capabilities": ["text_responses", "image_images"],
+            "default_models": {"brief_model": "gpt-4.1-mini", "copy_model": "gpt-4.1-mini"},
+            "config": {},
+            "enabled": True,
+        },
+    )
+    assert updated_blank_key.status_code == 200
+    assert updated_blank_key.json()["base_url"] is None
+
+    session = get_session_factory()()
+    try:
+        db_profile = session.get(ProviderProfile, profile_id)
+        assert db_profile is not None
+        assert db_profile.api_key == "chatgpt2api"
+        assert db_profile.base_url is None
+    finally:
+        session.close()
+
+    text_binding = client.patch(
+        "/api/settings/provider-bindings/text",
+        json={
+            "provider_kind": "openai",
+            "provider_profile_id": profile_id,
+            "model_settings": {"brief_model": "brief-model", "copy_model": "copy-model"},
+            "config": {},
+        },
+    )
+    assert text_binding.status_code == 200
+    assert text_binding.json()["provider_kind"] == "openai"
+
+    image_binding = client.patch(
+        "/api/settings/provider-bindings/image",
+        json={
+            "provider_kind": "openai_images",
+            "provider_profile_id": profile_id,
+            "model_settings": {"model": "gpt-image-2"},
+            "config": {"images_quality": "high", "images_style": "natural", "responses_background_enabled": True},
+        },
+    )
+    assert image_binding.status_code == 200
+    assert image_binding.json()["provider_kind"] == "openai_images"
+    assert image_binding.json()["config"] == {"images_quality": "high", "images_style": "natural"}
+
+    invalid_binding = client.patch(
+        "/api/settings/provider-bindings/image",
+        json={
+            "provider_kind": "openai_responses",
+            "provider_profile_id": profile_id,
+            "model_settings": {"model": "gpt-image-2"},
+            "config": {"responses_background_enabled": True},
+        },
+    )
+    assert invalid_binding.status_code == 400
+    assert "不支持当前接口能力" in invalid_binding.json()["detail"]
+
+    missing_text_model = client.patch(
+        "/api/settings/provider-bindings/text",
+        json={"provider_kind": "mock", "provider_profile_id": None, "model_settings": {}, "config": {}},
+    )
+    assert missing_text_model.status_code == 400
+    assert "文案商品理解模型未配置" in missing_text_model.json()["detail"]
+
+    missing_image_model = client.patch(
+        "/api/settings/provider-bindings/image",
+        json={
+            "provider_kind": "mock",
+            "provider_profile_id": None,
+            "model_settings": {},
+            "config": {},
+        },
+    )
+    assert missing_image_model.status_code == 400
+    assert "图片模型未配置" in missing_image_model.json()["detail"]
+
+    missing_responses_background = client.patch(
+        "/api/settings/provider-bindings/image",
+        json={
+            "provider_kind": "openai_responses",
+            "provider_profile_id": profile_id,
+            "model_settings": {"model": "gpt-5.4"},
+            "config": {},
+        },
+    )
+    assert missing_responses_background.status_code == 400
+    assert "图片 Responses 后台响应模式未配置" in missing_responses_background.json()["detail"]
+
+    remove_active_capability = client.patch(
+        f"/api/settings/provider-profiles/{profile_id}",
+        json={
+            "capabilities": ["text_responses"],
+        },
+    )
+    assert remove_active_capability.status_code == 400
+    assert "不能移除当前接口能力" in remove_active_capability.json()["detail"]
+
+    disable_active_profile = client.patch(
+        f"/api/settings/provider-profiles/{profile_id}",
+        json={"enabled": False},
+    )
+    assert disable_active_profile.status_code == 400
+    assert "不能停用" in disable_active_profile.json()["detail"]
+
+    archive_active = client.delete(f"/api/settings/provider-profiles/{profile_id}")
+    assert archive_active.status_code == 400
+    assert "仍被文案或图片配置使用" in archive_active.json()["detail"]
+
+    reset_image = client.patch(
+        "/api/settings/provider-bindings/image",
+        json={
+            "provider_kind": "mock",
+            "provider_profile_id": profile_id,
+            "model_settings": {"model": "mock-image"},
+            "config": {"images_quality": "high", "responses_background_enabled": True},
+        },
+    )
+    assert reset_image.status_code == 200
+    assert reset_image.json()["provider_profile_id"] is None
+    assert reset_image.json()["config"] == {}
+    reset_text = client.patch(
+        "/api/settings/provider-bindings/text",
+        json={
+            "provider_kind": "mock",
+            "provider_profile_id": None,
+            "model_settings": {"brief_model": "mock-brief", "copy_model": "mock-copy"},
+            "config": {},
+        },
+    )
+    assert reset_text.status_code == 200
+    archived = client.delete(f"/api/settings/provider-profiles/{profile_id}")
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+
+
+def test_resolvers_ignore_legacy_rows_after_provider_bindings_exist(configured_env: Path) -> None:
+    session = get_session_factory()()
+    try:
+        legacy_rows = [
+            AppSetting(key="text_provider_kind", value="openai"),
+            AppSetting(key="text_api_key", value="legacy-text-key"),
+            AppSetting(key="text_base_url", value="https://legacy-text.example/v1"),
+            AppSetting(key="image_provider_kind", value="openai_images"),
+            AppSetting(key="image_api_key", value="legacy-image-key"),
+            AppSetting(key="image_base_url", value="https://legacy-image.example/v1"),
+        ]
+        profile = ProviderProfile(
+            name="新供应商",
+            provider_type="openai_compatible",
+            base_url="https://new.example/v1",
+            api_key="new-key",
+            capabilities_json=["text_responses", "image_images"],
+            default_models_json={},
+            config_json={},
+            enabled=True,
+        )
+        session.add_all([*legacy_rows, profile])
+        session.flush()
+        session.add_all(
+            [
+                ProviderBinding(
+                    purpose="text",
+                    provider_kind="openai",
+                    provider_profile_id=profile.id,
+                    model_settings_json={"brief_model": "new-brief", "copy_model": "new-copy"},
+                    config_json={},
+                ),
+                ProviderBinding(
+                    purpose="image",
+                    provider_kind="openai_images",
+                    provider_profile_id=profile.id,
+                    model_settings_json={"model": "new-image"},
+                    config_json={
+                        "images_quality": "high",
+                        "images_style": "natural",
+                        "responses_background_enabled": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    text_config = resolve_text_provider_config()
+    assert text_config.api_key == "new-key"
+    assert text_config.base_url == "https://new.example/v1"
+    assert text_config.brief_model == "new-brief"
+
+    image_config = resolve_image_provider_config()
+    assert image_config.api_key == "new-key"
+    assert image_config.base_url == "https://new.example/v1"
+    assert image_config.model == "new-image"
+    assert image_config.images_quality == "high"
+    assert image_config.images_style == "natural"
+    assert image_config.responses_background_enabled is False
+
+
+def test_resolvers_reject_missing_models_instead_of_using_legacy_defaults(
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEXT_BRIEF_MODEL", "legacy-env-brief")
+    monkeypatch.setenv("TEXT_COPY_MODEL", "legacy-env-copy")
+    monkeypatch.setenv("IMAGE_GENERATE_MODEL", "legacy-env-image")
+    monkeypatch.setenv("IMAGE_RESPONSES_BACKGROUND_ENABLED", "false")
+    get_settings.cache_clear()
+
+    session = get_session_factory()()
+    try:
+        legacy_rows = [
+            AppSetting(key="text_brief_model", value="legacy-db-brief"),
+            AppSetting(key="text_copy_model", value="legacy-db-copy"),
+            AppSetting(key="image_generate_model", value="legacy-db-image"),
+            AppSetting(key="image_responses_background_enabled", value="false"),
+        ]
+        profile = ProviderProfile(
+            name="无模型默认供应商",
+            provider_type="openai_compatible",
+            base_url="https://new.example/v1",
+            api_key="new-key",
+            capabilities_json=["text_responses", "image_images"],
+            default_models_json={},
+            config_json={},
+            enabled=True,
+        )
+        session.add_all([*legacy_rows, profile])
+        session.flush()
+        session.add_all(
+            [
+                ProviderBinding(
+                    purpose="text",
+                    provider_kind="openai",
+                    provider_profile_id=profile.id,
+                    model_settings_json={},
+                    config_json={},
+                ),
+                ProviderBinding(
+                    purpose="image",
+                    provider_kind="openai_images",
+                    provider_profile_id=profile.id,
+                    model_settings_json={},
+                    config_json={},
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    with pytest.raises(RuntimeError) as text_error:
+        resolve_text_provider_config()
+    assert "文案商品理解模型未配置" in str(text_error.value)
+
+    with pytest.raises(RuntimeError) as image_error:
+        resolve_image_provider_config()
+    assert "图片模型未配置" in str(image_error.value)
 
 
 def test_images_api_runtime_options_normalize_and_validate_without_provider_key(configured_env: Path) -> None:
-    assert normalize_config_values({"image_images_quality": "", "image_images_style": ""}) == {
-        "image_images_quality": "",
-        "image_images_style": "",
-    }
-    assert normalize_config_values({"image_images_quality": "high", "image_images_style": "natural"}) == {
-        "image_images_quality": "high",
-        "image_images_style": "natural",
-    }
     with pytest.raises(ValueError) as error:
-        normalize_config_values({"image_images_quality": "ultra"})
-    assert "Images API Quality 必须是以下之一" in str(error.value)
+        normalize_config_values({"image_images_quality": "high"})
+    assert "未知配置项: image_images_quality" in str(error.value)
 
 
 def test_settings_api_accepts_and_validates_optional_image_tool_fields(configured_env: Path) -> None:
@@ -320,8 +729,6 @@ def test_settings_api_accepts_and_validates_optional_image_tool_fields(configure
     initial = client.get("/api/settings")
     assert initial.status_code == 200
     initial_items = {item["key"]: item for item in initial.json()["items"]}
-    assert initial_items["image_responses_background_enabled"]["input_type"] == "boolean"
-    assert initial_items["image_responses_background_enabled"]["value"] is True
     assert initial_items["image_tool_allowed_fields"]["input_type"] == "multi_select"
     assert initial_items["image_tool_allowed_fields"]["value"] == [
         "model",

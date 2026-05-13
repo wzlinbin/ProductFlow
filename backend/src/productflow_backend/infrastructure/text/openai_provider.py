@@ -15,6 +15,10 @@ from productflow_backend.application.contracts import (
 from productflow_backend.application.copy_payloads import normalize_copy_payload
 from productflow_backend.config import get_runtime_settings
 from productflow_backend.infrastructure.prompts import text_or_default
+from productflow_backend.infrastructure.provider_config import (
+    ResolvedTextProviderConfig,
+    resolve_text_provider_config,
+)
 from productflow_backend.infrastructure.text.base import TextProvider
 
 
@@ -22,14 +26,15 @@ class OpenAITextProvider(TextProvider):
     provider_name = "openai"
     prompt_version = "responses-json-v1"
 
-    def __init__(self) -> None:
+    def __init__(self, provider_config: ResolvedTextProviderConfig | None = None) -> None:
         settings = get_runtime_settings()
-        client_kwargs = {"api_key": settings.text_api_key}
-        if settings.text_base_url:
-            client_kwargs["base_url"] = settings.text_base_url
+        resolved_config = provider_config or resolve_text_provider_config()
+        client_kwargs = {"api_key": resolved_config.api_key}
+        if resolved_config.base_url:
+            client_kwargs["base_url"] = resolved_config.base_url
         self.client = OpenAI(**client_kwargs)
-        self.brief_model = settings.text_brief_model
-        self.copy_model = settings.text_copy_model
+        self.brief_model = resolved_config.brief_model
+        self.copy_model = resolved_config.copy_model
         self.brief_system_prompt = settings.prompt_brief_system
         self.copy_system_prompt = settings.prompt_copy_system
 

@@ -28,8 +28,8 @@ function configResponse(items: ConfigItem[]): ConfigResponse {
 describe("SettingsPage draft helpers", () => {
   it("only submits changed non-secret values instead of rewriting the whole config page", () => {
     const items = [
-      configItem({ key: "image_responses_background_enabled", input_type: "boolean", value: true }),
-      configItem({ key: "image_base_url", value: "https://old.example/v1" }),
+      configItem({ key: "admin_access_required", input_type: "boolean", value: true }),
+      configItem({ key: "image_main_image_size", value: "1024x1024" }),
       configItem({ key: "image_tool_allowed_fields", input_type: "multi_select", value: ["model", "quality"] }),
     ];
     const state = draftsFromConfig(configResponse(items));
@@ -38,18 +38,18 @@ describe("SettingsPage draft helpers", () => {
       items,
       {
         ...state.drafts,
-        image_base_url: "https://new.example/v1",
+        image_main_image_size: "1536x1024",
       },
       state.snapshots,
       {},
     );
 
-    expect(values).toEqual({ image_base_url: "https://new.example/v1" });
+    expect(values).toEqual({ image_main_image_size: "1536x1024" });
   });
 
   it("keeps untouched secrets out but submits touched secrets", () => {
     const items = [
-      configItem({ key: "image_api_key", input_type: "password", secret: true, has_value: true, value: "" }),
+      configItem({ key: "local_secret", input_type: "password", secret: true, has_value: true, value: "" }),
     ];
     const state = draftsFromConfig(configResponse(items));
 
@@ -57,11 +57,11 @@ describe("SettingsPage draft helpers", () => {
     expect(
       configValuesFromChangedDrafts(
         items,
-        { ...state.drafts, image_api_key: "sk-new" },
+        { ...state.drafts, local_secret: "sk-new" },
         state.snapshots,
-        { image_api_key: true },
+        { local_secret: true },
       ),
-    ).toEqual({ image_api_key: "sk-new" });
+    ).toEqual({ local_secret: "sk-new" });
   });
 
   it("detects multi-select changes by ordered option values", () => {

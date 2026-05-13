@@ -710,7 +710,7 @@ const DOC_PAGES: DocPage[] = [
   {
     slug: "settings-providers",
     title: "模型供应商",
-    description: "说明文案生成和图片生成相关 provider、模型、密钥、Base URL 和图片生成基础参数。",
+    description: "说明供应商档案、文案/图片用途绑定、模型和图片生成基础参数。",
     category: "配置",
     icon: Settings,
     sections: [
@@ -722,9 +722,8 @@ const DOC_PAGES: DocPage[] = [
             type: "table",
             headers: ["字段", "说明"],
             rows: [
-              ["文案供应商", "控制商品理解和文案生成使用 `mock` 还是真实 OpenAI Responses 兼容接口。开发自测可用 Mock；真实生成需要 OpenAI。"],
-              ["文案 API Key", "仅文案供应商为 OpenAI 时使用。接口不会回显已有密钥；输入新值才会覆盖。"],
-              ["文案 Base URL", "OpenAI 兼容接口地址。留空使用 SDK 默认地址；使用代理或兼容网关时填写。"],
+              ["供应商档案", "保存 OpenAI 兼容接口的 Base URL、API Key 和能力。密钥不会回显；编辑档案时留空 API Key 会保留旧值。"],
+              ["文案用途绑定", "选择 `mock` 或真实 OpenAI Responses 兼容接口，并选择具备文案能力的供应商档案。"],
               ["商品理解模型", "用于把商品名称、类目、价格、说明等整理成 CreativeBrief。"],
               ["文案生成模型", "用于生成 CopyPayloadV2 结构化文案，可包含自由正文、文案块、布局分区和视觉建议。"],
             ],
@@ -739,12 +738,11 @@ const DOC_PAGES: DocPage[] = [
             type: "table",
             headers: ["字段", "说明"],
             rows: [
-              ["图片供应商", "控制工作台 AI 生图和文/图生图使用 `mock`、OpenAI Responses 或 OpenAI Images API。"],
-              ["图片 API Key", "真实图片供应商使用的密钥。密钥不会回显。"],
-              ["图片 Base URL", "OpenAI 兼容接口地址。留空使用 SDK 默认地址。"],
+              ["供应商档案", "同一个档案可以同时声明文案、Responses 图片和 Images API 图片能力；不同网关也可以拆成多个档案。"],
+              ["图片用途绑定", "选择 `mock`、OpenAI Responses 或 OpenAI Images API，并选择具备对应图片能力的供应商档案。"],
               ["图片模型", "发送给图片 provider 的默认图片模型。Responses 与 Images API 支持范围可能不同。"],
-              ["Responses 后台响应模式", "默认开启。长任务先拿到 response_id 再轮询状态；如果网关明确不支持，会自动回退同步请求。"],
-              ["Images API Quality / Style", "仅 OpenAI Images API 使用。兼容网关不支持可选字段时会按基础参数重试。"],
+              ["Responses 后台响应模式", "只属于 OpenAI Responses 图片绑定。开启后长任务先拿到 response_id 再轮询状态；如果网关明确不支持，会按同步请求重试。"],
+              ["Images API Quality / Style", "只属于 OpenAI Images API 图片绑定。兼容网关不支持可选字段时会按基础参数重试。"],
               ["生图最大单边", "工作台生图和文/图生图的最大宽/高像素。最大面积同步使用该值平方。"],
               ["主图尺寸（兼容默认）", "高级兼容值。只有当 provider 输入未明确传入 image_size 且类型为主图时才使用。新工作流优先看节点里的尺寸选择器。"],
               ["促销海报尺寸（兼容默认）", "高级兼容值。只有当 provider 输入未明确传入 image_size 且类型为促销海报时才使用。"],
@@ -1144,12 +1142,12 @@ const DOC_PAGES_EN: DocPage[] = [
   {
     slug: "settings-providers",
     title: "Model providers",
-    description: "Explains providers, models, API keys, Base URLs, and base image generation parameters for copy and image generation.",
+    description: "Explains provider profiles, copy/image purpose bindings, models, and base image generation parameters.",
     category: "Settings",
     icon: Settings,
     sections: [
-      { id: "text-settings", title: "Copy generation", blocks: [{ type: "table", headers: ["Field", "Description"], rows: [["Copy provider", "Controls whether product understanding and copy generation use `mock` or a real OpenAI Responses-compatible interface. Mock is useful for local checks; real generation requires OpenAI."], ["Copy API key", "Used only when the copy provider is OpenAI. Existing secrets are not returned; enter a new value to replace."], ["Copy Base URL", "OpenAI-compatible API base URL. Leave blank for the SDK default; fill it for proxies or compatible gateways."], ["Product understanding model", "Organizes product name, category, price, and description into a CreativeBrief."], ["Copy generation model", "Generates CopyPayloadV2 structured copy, which can contain freeform text, copy blocks, layout sections, and visual guidance."]] }] },
-      { id: "image-settings", title: "Image generation", blocks: [{ type: "table", headers: ["Field", "Description"], rows: [["Image provider", "Controls whether workbench AI image generation and image chat use `mock`, OpenAI Responses, or OpenAI Images API."], ["Image API key", "Used by real image providers. Secrets are not returned."], ["Image Base URL", "OpenAI-compatible API base URL. Leave blank for the SDK default."], ["Image model", "Default image model sent to the image provider. Responses and Images API support different model sets."], ["Responses background mode", "Enabled by default. Long tasks first receive a response_id and then poll status; gateways that clearly do not support it fall back to synchronous requests."], ["Images API Quality / Style", "Used only by OpenAI Images API. Compatible gateways that reject optional fields retry with the base parameters."], ["Image max single edge", "Maximum width or height in pixels for workbench image generation and image chat. Maximum area uses this value squared."], ["Main image size (compat default)", "Advanced compatibility value used only when provider input does not explicitly send image_size and kind is main image. New workflows prefer the node size picker."], ["Promo poster size (compat default)", "Advanced compatibility value used only when provider input does not explicitly send image_size and kind is promo poster."], ["Poster generation mode", "`Template render` does not consume the image model; `AI generation` calls the image provider."], ["Poster font path", "Font file used for Chinese text rendering in template posters and mock images."]] }] },
+      { id: "text-settings", title: "Copy generation", blocks: [{ type: "table", headers: ["Field", "Description"], rows: [["Provider profile", "Stores the OpenAI-compatible Base URL, API key, and capabilities. Secrets are not returned; leaving API key blank while editing preserves the old value."], ["Copy purpose binding", "Selects `mock` or a real OpenAI Responses-compatible interface, and points to a provider profile with copy capability."], ["Product understanding model", "Organizes product name, category, price, and description into a CreativeBrief."], ["Copy generation model", "Generates CopyPayloadV2 structured copy, which can contain freeform text, copy blocks, layout sections, and visual guidance."]] }] },
+      { id: "image-settings", title: "Image generation", blocks: [{ type: "table", headers: ["Field", "Description"], rows: [["Provider profile", "A profile can declare copy, Responses image, and Images API image capabilities. Different gateways can also be represented by separate profiles."], ["Image purpose binding", "Selects `mock`, OpenAI Responses, or OpenAI Images API, and points to a provider profile with the matching image capability."], ["Image model", "Default image model sent to the image provider. Responses and Images API support different model sets."], ["Responses background mode", "Only belongs to the OpenAI Responses image binding. When enabled, long tasks first receive a response_id and then poll status; gateways that clearly do not support it retry as synchronous requests."], ["Images API Quality / Style", "Only belongs to the OpenAI Images API image binding. Compatible gateways that reject optional fields retry with the base parameters."], ["Image max single edge", "Maximum width or height in pixels for workbench image generation and image chat. Maximum area uses this value squared."], ["Main image size (compat default)", "Advanced compatibility value used only when provider input does not explicitly send image_size and kind is main image. New workflows prefer the node size picker."], ["Promo poster size (compat default)", "Advanced compatibility value used only when provider input does not explicitly send image_size and kind is promo poster."], ["Poster generation mode", "`Template render` does not consume the image model; `AI generation` calls the image provider."], ["Poster font path", "Font file used for Chinese text rendering in template posters and mock images."]] }] },
     ],
   },
   {

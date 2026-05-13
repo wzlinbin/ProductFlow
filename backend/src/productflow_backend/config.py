@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     """应用配置：环境变量 + 数据库覆盖。
 
     基础设施配置（数据库 / Redis / Secret 等）仅从环境变量读取，
-    业务配置（供应商 / 模型 / 上传限制）可在运行时通过 app_settings 表覆盖。
+    业务配置可在运行时通过 app_settings 表覆盖。历史 text/image provider 字段仅作为供应商迁移输入。
     """
 
     model_config = SettingsConfigDict(
@@ -267,108 +267,6 @@ def get_settings() -> Settings:
 
 
 CONFIG_DEFINITIONS: tuple[ConfigDefinition, ...] = (
-    ConfigDefinition(
-        key="text_provider_kind",
-        label="文案供应商",
-        category="文案生成",
-        input_type="select",
-        options=(ConfigOption("mock", "Mock"), ConfigOption("openai", "OpenAI Responses")),
-        description="控制商品理解和文案生成走 mock 还是真实 OpenAI 兼容接口。",
-    ),
-    ConfigDefinition(
-        key="text_api_key",
-        label="文案 API Key",
-        category="文案生成",
-        input_type="password",
-        secret=True,
-        description="仅在文案供应商为 OpenAI 时使用；接口不会回显已有密钥。",
-    ),
-    ConfigDefinition(
-        key="text_base_url",
-        label="文案 Base URL",
-        category="文案生成",
-        input_type="text",
-        description="OpenAI 兼容接口地址，留空则使用 SDK 默认地址。",
-    ),
-    ConfigDefinition(
-        key="text_brief_model",
-        label="商品理解模型",
-        category="文案生成",
-        input_type="text",
-    ),
-    ConfigDefinition(
-        key="text_copy_model",
-        label="文案生成模型",
-        category="文案生成",
-        input_type="text",
-    ),
-    ConfigDefinition(
-        key="image_provider_kind",
-        label="图片供应商",
-        category="图片生成",
-        input_type="select",
-        options=(
-            ConfigOption("mock", "Mock"),
-            ConfigOption("openai_responses", "OpenAI Responses"),
-            ConfigOption("openai_images", "OpenAI Images API"),
-        ),
-        description="控制文/图生图和 AI 生成海报使用的图片供应商。",
-    ),
-    ConfigDefinition(
-        key="image_api_key",
-        label="图片 API Key",
-        category="图片生成",
-        input_type="password",
-        secret=True,
-        description="仅在图片供应商为真实 OpenAI / OpenAI 兼容接口时使用；接口不会回显已有密钥。",
-    ),
-    ConfigDefinition(
-        key="image_base_url",
-        label="图片 Base URL",
-        category="图片生成",
-        input_type="text",
-        description="OpenAI 兼容接口地址，留空则使用 SDK 默认地址。",
-    ),
-    ConfigDefinition(
-        key="image_generate_model",
-        label="图片模型",
-        category="图片生成",
-        input_type="text",
-        description="发送给当前图片供应商的模型名；Responses 与 Images API 支持的模型范围可能不同。",
-    ),
-    ConfigDefinition(
-        key="image_responses_background_enabled",
-        label="Responses 后台响应模式",
-        category="图片生成",
-        input_type="boolean",
-        description="默认开启，长任务先获取 response_id 并轮询状态；如网关明确不支持会自动回退同步请求。",
-    ),
-    ConfigDefinition(
-        key="image_images_quality",
-        label="Images API Quality",
-        category="图片生成",
-        input_type="select",
-        options=(
-            ConfigOption("", "默认"),
-            ConfigOption("standard", "standard"),
-            ConfigOption("hd", "hd"),
-            ConfigOption("low", "low"),
-            ConfigOption("medium", "medium"),
-            ConfigOption("high", "high"),
-            ConfigOption("auto", "auto"),
-        ),
-        description="仅 openai_images 供应商使用；不支持该字段的兼容网关会回退到基础参数重试。",
-        optional=True,
-    ),
-    ConfigDefinition(
-        key="image_images_style",
-        label="Images API Style",
-        category="图片生成",
-        input_type="select",
-        options=(ConfigOption("", "默认"), ConfigOption("vivid", "vivid"), ConfigOption("natural", "natural")),
-        description="仅 openai_images 供应商使用。DALL-E 3 支持 vivid/natural。",
-        optional=True,
-    ),
     ConfigDefinition(
         key="image_tool_allowed_fields",
         label="可用 Tool 字段",

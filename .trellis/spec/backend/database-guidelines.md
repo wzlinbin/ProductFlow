@@ -136,6 +136,128 @@ For runtime settings:
 - Database rows override only keys in `RUNTIME_CONFIG_KEYS`.
 - Reset deletes the database row and falls back to the env/default `Settings` value.
 
+## Scenario: Provider profile and purpose binding configuration
+
+### 1. Scope / Trigger
+
+- Trigger: changing text provider selection, image provider selection, settings APIs, provider secrets, or legacy
+  `text_*` / `image_*` provider env keys.
+- This is a cross-layer and database contract because provider configuration spans `Settings`, `app_settings`,
+  `provider_profiles`, `provider_bindings`, provider factories, API DTOs, and `SettingsPage`.
+
+### 2. Signatures
+
+- DB table: `provider_profiles`
+  - `id: String(36)`
+  - `name: String(120)`
+  - `provider_type: "openai_compatible"`
+  - `base_url: Text | null`
+  - `api_key: Text | null`
+  - `capabilities_json: JSON list[str]`
+  - `default_models_json: JSON object`
+  - `config_json: JSON object`
+  - `enabled: bool`
+  - `archived_at: datetime | null`
+- DB table: `provider_bindings`
+  - `purpose: "text" | "image"`
+  - `provider_kind: "mock" | "openai" | "openai_responses" | "openai_images"`
+  - `provider_profile_id: String(36) | null`
+  - `model_settings_json: JSON object`
+  - `config_json: JSON object`
+- API:
+  - `GET /api/settings/provider-config`
+  - `POST /api/settings/provider-profiles`
+  - `PATCH /api/settings/provider-profiles/{profile_id}`
+  - `DELETE /api/settings/provider-profiles/{profile_id}`
+  - `PATCH /api/settings/provider-bindings/{purpose}`
+- Resolver functions:
+  - `resolve_text_provider_config() -> ResolvedTextProviderConfig`
+  - `resolve_image_provider_config() -> ResolvedImageProviderConfig`
+
+### 3. Contracts
+
+- `CONFIG_DEFINITIONS` must not expose provider connection fields:
+  - `text_provider_kind`, `text_api_key`, `text_base_url`
+  - `text_brief_model`, `text_copy_model`
+  - `image_provider_kind`, `image_api_key`, `image_base_url`
+  - `image_generate_model`, `image_images_quality`, `image_images_style`, `image_responses_background_enabled`
+- `Settings` may keep those fields only as env parsing and legacy bootstrap input.
+- `ensure_provider_config_bootstrapped(session)` reads legacy effective provider config from env plus legacy
+  `app_settings` rows, then creates provider profiles and text/image bindings once.
+- If legacy text and image configs share the same `(base_url, api_key)`, bootstrap creates one profile with merged
+  capabilities. Different connections create separate profiles.
+- Provider factories and concrete clients must read API key, base URL, provider kind, and model through
+  `resolve_*_provider_config()`. They must not fall back to old `Settings.text_api_key`,
+  `Settings.image_api_key`, or provider kind fields.
+- Provider model settings must come from `provider_bindings.model_settings_json` or
+  `provider_profiles.default_models_json`. If required model settings are absent after bootstrap, resolvers must fail
+  with a clear configuration error instead of falling back to legacy `Settings.text_brief_model`,
+  `Settings.text_copy_model`, or `Settings.image_generate_model`.
+- Image binding config is provider-kind scoped: `openai_responses` owns `responses_background_enabled`, while
+  `openai_images` owns `images_quality` and `images_style`. Do not require or persist Responses background config for
+  `openai_images` or `mock`.
+- API responses for provider profiles expose `has_api_key`; they never expose the raw `api_key`.
+- A blank API key update preserves the existing stored key. A non-blank API key update replaces it.
+- While a provider profile is referenced by a real text/image binding, profile updates must not disable it or remove the
+  capability required by that binding.
+- Docker Compose must continue passing legacy `TEXT_*` / `IMAGE_*` provider env values into backend and worker containers
+  during the migration window, because containerized bootstrap cannot read the host `.env` file directly.
+
+### 4. Validation & Error Matrix
+
+- `PATCH /api/settings` with old provider keys -> `400`, `未知配置项: <key>`.
+- Provider binding with unsupported purpose -> `400` or `404` depending on route ownership.
+- Real provider binding without `provider_profile_id` -> `400`, `真实供应商必须选择供应商档案`.
+- Binding to a disabled or archived profile -> `400`, profile unavailable detail.
+- Binding to a profile missing the required capability -> `400`, capability unsupported detail.
+- Removing a capability from a profile still used by a binding -> `400`, active binding detail.
+- Disabling a profile still used by a binding -> `400`, active binding detail.
+- Archiving a provider profile still used by a binding -> `400`, active binding detail.
+- Missing provider config tables during very early startup -> settings defaults may still load, but real provider
+  resolution must fail clearly rather than using old URL/key fallback.
+- Missing text/image model settings in both binding and profile defaults -> resolver fails clearly and asks the operator to
+  configure the provider binding; do not silently use legacy env/app_settings model values.
+- Missing `responses_background_enabled` -> only `openai_responses` image bindings fail. `openai_images` and `mock` must
+  not require that field.
+
+### 5. Good/Base/Bad Cases
+
+- Good: one OpenAI-compatible gateway supports `text_responses` and `image_images`; text and image bindings point to the
+  same profile and carry separate model settings.
+- Good: a text gateway and an image gateway use different keys or URLs; bootstrap creates two profiles.
+- Base: default local development has mock text/image bindings and no real provider profile.
+- Bad: showing `text_api_key` or `image_api_key` in `/api/settings`.
+- Bad: constructing an OpenAI client from `get_runtime_settings().image_api_key`.
+- Bad: keeping a route-level legacy binding response that reports old provider kind when no binding exists.
+
+### 6. Tests Required
+
+- Settings API test that `/api/settings` excludes all old provider keys and rejects updates for those keys.
+- Bootstrap test for matching legacy text/image URL and key producing one profile with merged capabilities.
+- Bootstrap test for different legacy URL/key pairs producing separate profiles.
+- API test that provider profile responses never include the raw key and blank-key update preserves the stored key.
+- Binding validation test for required capabilities and active profile constraints.
+- Profile update test that active bindings prevent removing required capabilities and disabling the profile.
+- Resolver test proving existing provider bindings override stale legacy `app_settings` rows.
+- Resolver test proving missing binding/profile model settings do not fall back to stale legacy model rows or env values.
+- Provider payload tests should set legacy provider kind explicitly when they rely on env bootstrap.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```python
+settings = get_runtime_settings()
+client = OpenAI(api_key=settings.image_api_key, base_url=settings.image_base_url)
+```
+
+Correct:
+
+```python
+provider_config = resolve_image_provider_config()
+client = OpenAI(api_key=provider_config.api_key, base_url=provider_config.base_url)
+```
+
 ## Scenario: Runtime admin access toggle
 
 ### 1. Scope / Trigger
@@ -623,8 +745,9 @@ failures into safe persisted failure reasons instead of leaking provider details
 
 #### 2. Signatures
 
+- Image provider binding config:
+  - `provider_bindings[purpose="image"].config_json.responses_background_enabled` for `provider_kind="openai_responses"`
 - Runtime config keys:
-  - `image_responses_background_enabled`
   - `image_tool_allowed_fields`
   - `image_tool_model`
   - `image_tool_quality`
@@ -649,7 +772,7 @@ failures into safe persisted failure reasons instead of leaking provider details
 
 ```json
 {
-  "model": "<image_generate_model>",
+  "model": "<provider_bindings[purpose=image].model_settings_json.model>",
   "input": "<prompt or Responses multimodal input>",
   "tools": [
     {
@@ -662,12 +785,16 @@ failures into safe persisted failure reasons instead of leaking provider details
 
 #### 3. Contracts
 
-- Top-level `model` remains `image_generate_model`; `image_tool_model` is only the optional tool-level `model`.
+- Top-level `model` comes from the resolved image provider binding; `image_tool_model` is only the optional tool-level
+  `model`.
 - Defaults must remain AnyRouter-compatible: the tool object is effectively `{"type":"image_generation","size": size}`.
-- Top-level Responses `background=true` is controlled by `image_responses_background_enabled` and defaults to enabled so
-  long-running image tasks can persist a `response_id` quickly and continue through `responses.retrieve(...)` polling.
-  Gateways that explicitly reject top-level `background` must trigger one automatic retry without the field; operators
-  may still disable the setting when they know a gateway is incompatible and want to avoid the fallback round trip.
+- Top-level Responses `background=true` is controlled by image purpose binding
+  `config_json.responses_background_enabled`. It is required only when the binding `provider_kind` is `openai_responses`.
+  `mock` and `openai_images` image bindings must not persist or validate this field.
+- When enabled, long-running image tasks can persist a `response_id` quickly and continue through
+  `responses.retrieve(...)` polling. Gateways that explicitly reject top-level `background` must trigger one automatic
+  retry without the field; operators may still disable the binding field when they know a gateway is incompatible and want
+  to avoid the fallback round trip.
 - Do not add default `tool_choice` for image generation.
 - Optional tool fields are sent only when non-empty/non-null after runtime settings normalization and when included in
   `image_tool_allowed_fields`.
@@ -702,9 +829,11 @@ failures into safe persisted failure reasons instead of leaking provider details
 - `image_tool_partial_images < 0` or `> 3` -> `/api/settings` returns `400`.
 - `image_tool_n < 1` or `> 10` -> `/api/settings` returns `400`.
 - `image_tool_allowed_fields` contains an unknown field -> `/api/settings` returns `400`.
-- `image_responses_background_enabled == False` -> provider payload omits top-level `background`.
-- `image_responses_background_enabled == True` and provider rejects top-level `background` -> retry without it once and
-  keep the user-facing failure/detail generic if both attempts fail.
+- `openai_responses` image binding lacks `responses_background_enabled` -> provider binding update returns `400`.
+- `responses_background_enabled == False` -> Responses provider payload omits top-level `background`.
+- `responses_background_enabled == True` and provider rejects top-level `background` -> retry without it once and keep the
+  user-facing failure/detail generic if both attempts fail.
+- `openai_images` or `mock` image binding receives `responses_background_enabled` -> field is ignored and not stored.
 - Per-request or workflow `tool_options` contains fields not listed in `image_tool_allowed_fields` -> field is filtered
   before persistence and provider calls.
 - Per-request `tool_options.output_compression < 0` or `> 100` -> `/api/image-sessions/{id}/generate` returns `422`.
@@ -776,7 +905,7 @@ Correct:
 tool = {"type": "image_generation", "size": size}
 if settings.image_tool_output_format:
     tool["output_format"] = settings.image_tool_output_format
-request_payload = {"model": settings.image_generate_model, "input": input_payload, "tools": [tool]}
+request_payload = {"model": resolved_config.model, "input": input_payload, "tools": [tool]}
 ```
 
 ### Scenario: Runtime prompt customization

@@ -52,3 +52,61 @@ class SettingsLockStateResponse(BaseModel):
 
 class SettingsUnlockRequest(BaseModel):
     token: str = Field(min_length=1)
+
+
+class ProviderProfileResponse(BaseModel):
+    id: str
+    name: str
+    provider_type: str
+    base_url: str | None = None
+    capabilities: list[str]
+    default_models: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool
+    archived_at: str | None = None
+    has_api_key: bool
+    created_at: str
+    updated_at: str
+
+
+class ProviderBindingResponse(BaseModel):
+    id: str
+    purpose: str
+    provider_kind: str
+    provider_profile_id: str | None = None
+    model_settings: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+    updated_at: str
+
+
+class ProviderConfigResponse(BaseModel):
+    profiles: list[ProviderProfileResponse]
+    bindings: list[ProviderBindingResponse]
+
+
+class ProviderProfileCreateRequest(BaseModel):
+    name: str = Field(min_length=1)
+    base_url: str | None = None
+    api_key: str | None = None
+    capabilities: list[str] = Field(min_length=1)
+    default_models: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class ProviderProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    capabilities: list[str] | None = None
+    default_models: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
+    enabled: bool | None = None
+
+
+class ProviderBindingUpdateRequest(BaseModel):
+    provider_kind: str
+    provider_profile_id: str | None = None
+    model_settings: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)

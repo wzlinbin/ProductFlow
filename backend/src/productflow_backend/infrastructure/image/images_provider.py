@@ -29,6 +29,10 @@ from productflow_backend.infrastructure.image.responses_provider import (
     poster_has_reference_input,
 )
 from productflow_backend.infrastructure.prompts import render_prompt_template
+from productflow_backend.infrastructure.provider_config import (
+    ResolvedImageProviderConfig,
+    resolve_image_provider_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,17 +82,17 @@ class OpenAIImagesClient:
 
     provider_name = "openai-images"
 
-    def __init__(self) -> None:
-        settings = get_runtime_settings()
-        self.api_key = settings.image_api_key
-        self.base_url = settings.image_base_url
-        self.model = settings.image_generate_model
-        self.quality = settings.image_images_quality
-        self.style = settings.image_images_style
+    def __init__(self, provider_config: ResolvedImageProviderConfig | None = None) -> None:
+        resolved_config = provider_config or resolve_image_provider_config()
+        self.api_key = resolved_config.api_key
+        self.base_url = resolved_config.base_url
+        self.model = resolved_config.model
+        self.quality = resolved_config.images_quality
+        self.style = resolved_config.images_style
 
     def _client(self) -> OpenAI:
         if not self.api_key:
-            raise RuntimeError("图片供应商缺少 IMAGE_API_KEY")
+            raise RuntimeError("图片供应商档案缺少 API Key")
         kwargs: dict[str, Any] = {"api_key": self.api_key}
         if self.base_url:
             kwargs["base_url"] = self.base_url
@@ -335,13 +339,16 @@ class OpenAIImagesImageProvider(ImageProvider):
     provider_name = "openai-images"
     prompt_version = "images-api-v1"
 
+    def __init__(self, provider_config: ResolvedImageProviderConfig | None = None) -> None:
+        self.provider_config = provider_config or resolve_image_provider_config()
+
     def generate_poster_image(
         self,
         poster: PosterGenerationInput,
         kind: PosterKind,
     ) -> tuple[GeneratedImagePayload, str]:
         settings = get_runtime_settings()
-        client = OpenAIImagesClient()
+        client = OpenAIImagesClient(self.provider_config)
 
         size = poster.image_size or (
             settings.image_main_image_size if kind == PosterKind.MAIN_IMAGE else settings.image_promo_poster_size
