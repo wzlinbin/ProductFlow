@@ -11,7 +11,8 @@ from typing import Any, Literal
 from PIL import Image, ImageDraw
 
 from productflow_backend.config import get_runtime_settings
-from productflow_backend.infrastructure.image.base import parse_size
+from productflow_backend.infrastructure.image.base import decode_b64_image, parse_size
+from productflow_backend.infrastructure.image.images_provider import OpenAIImagesClient
 from productflow_backend.infrastructure.image.responses_provider import (
     OpenAIResponsesImageClient,
     ResponsesReferenceImage,
@@ -88,6 +89,13 @@ class ImageChatService:
                 previous_response_id=previous_response_id,
                 tool_options=tool_options,
                 progress_callback=progress_callback,
+            )
+        if self.provider_kind == "openai_images":
+            return self._generate_openai_images(
+                prompt=prompt,
+                size=size,
+                history=history,
+                manual_reference_images=manual_reference_images,
             )
         raise RuntimeError(f"暂不支持的图片 provider: {self.provider_kind}")
 
@@ -226,3 +234,50 @@ class ImageChatService:
         history_references.reverse()
         references.extend(history_references)
         return references[:6]
+
+    def _generate_openai_images(
+        self,
+        prompt: str,
+        size: str,
+        history: list[ImageChatTurn],
+        manual_reference_images: list[str],
+    ) -> GeneratedChatImage:
+        client = OpenAIImagesClient()
+        full_prompt = self._build_prompt(prompt=prompt, history=history, size=size)
+
+        base_image_bytes = self._find_base_image_bytes(history, manual_reference_images)
+        if base_image_bytes is not None:
+            results = client.edit(image=base_image_bytes, prompt=full_prompt, size=size)
+        else:
+            results = client.generate(prompt=full_prompt, size=size)
+
+        result = results[0]
+        return GeneratedChatImage(
+            bytes_data=result.bytes_data,
+            mime_type=result.mime_type,
+            model_name=result.model_name,
+            provider_name="openai-images",
+            prompt_version=self.prompt_version,
+            size=size,
+            generated_at=result.generated_at,
+            provider_response_id=None,
+            previous_response_id=None,
+            image_generation_call_id=None,
+            provider_request_json=result.provider_request_json,
+            provider_output_json=None,
+        )
+
+    def _find_base_image_bytes(
+        self,
+        history: list[ImageChatTurn],
+        manual_reference_images: list[str],
+    ) -> bytes | None:
+        """Find the most recent assistant-generated image to use as edit base."""
+        for turn in reversed(history):
+            if turn.role == "assistant" and turn.image_data_url:
+                ref = decode_reference_data_url(turn.image_data_url)
+                return ref.bytes_data
+        if manual_reference_images:
+            ref = decode_reference_data_url(manual_reference_images[0])
+            return ref.bytes_data
+        return None

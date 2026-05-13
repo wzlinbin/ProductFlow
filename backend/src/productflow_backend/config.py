@@ -142,6 +142,8 @@ class Settings(BaseSettings):
     image_api_key: str | None = None
     image_base_url: str | None = None
     image_generate_model: str = "gpt-5.4"
+    image_images_quality: str | None = None
+    image_images_style: str | None = None
     image_responses_background_enabled: bool = True
     image_tool_model: str | None = None
     image_tool_quality: str | None = None
@@ -210,6 +212,8 @@ class Settings(BaseSettings):
         "image_tool_moderation",
         "image_tool_action",
         "image_tool_input_fidelity",
+        "image_images_quality",
+        "image_images_style",
         mode="before",
     )
     @classmethod
@@ -303,7 +307,7 @@ CONFIG_DEFINITIONS: tuple[ConfigDefinition, ...] = (
         label="图片供应商",
         category="图片生成",
         input_type="select",
-        options=(ConfigOption("mock", "Mock"), ConfigOption("openai_responses", "OpenAI Responses")),
+        options=(ConfigOption("mock", "Mock"), ConfigOption("openai_responses", "OpenAI Responses"), ConfigOption("openai_images", "OpenAI Images API")),
         description="控制文/图生图和 AI 生成海报使用的图片供应商。",
     ),
     ConfigDefinition(
@@ -333,6 +337,24 @@ CONFIG_DEFINITIONS: tuple[ConfigDefinition, ...] = (
         category="图片生成",
         input_type="boolean",
         description="默认开启，长任务先获取 response_id 并轮询状态；如网关明确不支持会自动回退同步请求。",
+    ),
+    ConfigDefinition(
+        key="image_images_quality",
+        label="Images API Quality",
+        category="图片生成",
+        input_type="select",
+        options=(ConfigOption("", "默认"), ConfigOption("standard", "standard"), ConfigOption("hd", "hd"), ConfigOption("auto", "auto")),
+        description="仅 openai_images 供应商使用。DALL-E 3 支持 standard/hd。",
+        optional=True,
+    ),
+    ConfigDefinition(
+        key="image_images_style",
+        label="Images API Style",
+        category="图片生成",
+        input_type="select",
+        options=(ConfigOption("", "默认"), ConfigOption("vivid", "vivid"), ConfigOption("natural", "natural")),
+        description="仅 openai_images 供应商使用。DALL-E 3 支持 vivid/natural。",
+        optional=True,
     ),
     ConfigDefinition(
         key="image_tool_allowed_fields",
