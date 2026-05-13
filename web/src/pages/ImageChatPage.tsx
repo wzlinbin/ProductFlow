@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Drawer } from "vaul";
 import {
   Check,
+  ChevronRight,
   Download,
   GalleryHorizontalEnd,
   History,
@@ -10,6 +12,7 @@ import {
   ImagePlus,
   Layers3,
   Loader2,
+  Menu,
   MessagesSquare,
   OctagonX,
   Pencil,
@@ -19,6 +22,7 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -74,6 +78,7 @@ import {
   shouldBlockDuplicateGenerationSubmit,
   shouldRefreshImageSessionDetailFromStatus,
 } from "./image-chat/branching";
+import { formatMobileGenerationSummary } from "./image-chat/mobileLayout";
 import type {
   ImageGenerationSubmitGuard,
   ImageGenerationSubmitPayload,
@@ -231,6 +236,8 @@ export function ImageChatPage() {
   const autoCreateTriggered = useRef(false);
   const pendingGeneratedRoundCountRef = useRef<number | null>(null);
   const duplicateSubmitGuardRef = useRef<ImageGenerationSubmitGuard | null>(null);
+  const mobileSessionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSettingsButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedGeneratedAssetId, setSelectedGeneratedAssetId] = useState<string | null>(null);
@@ -254,6 +261,8 @@ export function ImageChatPage() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
   const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_PANEL_DEFAULT_WIDTH);
   const [historyPanelHeight, setHistoryPanelHeight] = useState(HISTORY_PANEL_DEFAULT_HEIGHT);
+  const [mobileSessionDrawerOpen, setMobileSessionDrawerOpen] = useState(false);
+  const [mobileGenerationSheetOpen, setMobileGenerationSheetOpen] = useState(false);
 
   const leftPanelStyle = {
     "--image-chat-left-panel-width": `${leftPanelWidth}px`,
@@ -342,6 +351,7 @@ export function ImageChatPage() {
     resetImageSessionSelection();
     setSuccessMessage("");
     setErrorMessage("");
+    setMobileSessionDrawerOpen(false);
   }
 
   useEffect(() => {
@@ -489,6 +499,15 @@ export function ImageChatPage() {
   const selectedPlaceholder = useMemo(
     () => findImageHistoryPlaceholder(historyBranches, selectedTaskPlaceholderId),
     [historyBranches, selectedTaskPlaceholderId],
+  );
+  const generationSummary = formatMobileGenerationSummary(
+    {
+      size,
+      generationCount,
+      selectedReferenceCount: selectedReferenceAssetIds.length,
+      toolOptions: compactImageToolOptions(toolOptions, imageToolAllowedFields) ?? {},
+    },
+    t,
   );
   const activePreviewRound =
     previewRound && imageSession?.rounds.some((round) => round.id === previewRound.id) ? previewRound : null;
@@ -828,6 +847,7 @@ export function ImageChatPage() {
       setErrorMessage(t("chat.deleteDisabled"));
       return;
     }
+    setMobileSessionDrawerOpen(false);
     setPendingDeleteAction({ kind: "session", sessionId });
   }
 
@@ -914,6 +934,41 @@ export function ImageChatPage() {
     window.addEventListener("pointercancel", finishResize);
   }
 
+  function handleMobileEdgeSwipeStart(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" || event.clientX > 24 || mobileSessionDrawerOpen || mobileGenerationSheetOpen) {
+      return;
+    }
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const pointerId = event.pointerId;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) {
+        return;
+      }
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = Math.abs(moveEvent.clientY - startY);
+      if (deltaX > 72 && deltaY < 48) {
+        setMobileSessionDrawerOpen(true);
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", finishSwipe);
+        window.removeEventListener("pointercancel", finishSwipe);
+      }
+    };
+    const finishSwipe = (finishEvent: PointerEvent) => {
+      if (finishEvent.pointerId !== pointerId) {
+        return;
+      }
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishSwipe);
+      window.removeEventListener("pointercancel", finishSwipe);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishSwipe);
+    window.addEventListener("pointercancel", finishSwipe);
+  }
+
   const pendingDeleteDialog = pendingDeleteAction
     ? {
         title:
@@ -945,9 +1000,12 @@ export function ImageChatPage() {
         onLogout={() => logoutMutation.mutate()}
       />
 
-      <main className="flex flex-1 flex-col pb-28 lg:min-h-0 lg:flex-row lg:overflow-hidden lg:pb-0">
+      <main
+        className="flex flex-1 flex-col pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:flex-row lg:overflow-hidden lg:pb-0"
+        onPointerDown={handleMobileEdgeSwipeStart}
+      >
         <aside
-          className="relative flex w-full shrink-0 flex-col border-b border-slate-200 bg-white/95 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[12px_0_36px_rgba(0,0,0,0.24)] dark:backdrop-blur-xl lg:w-[var(--image-chat-left-panel-width)] lg:border-b-0 lg:border-r"
+          className="relative hidden w-full shrink-0 flex-col border-b border-slate-200 bg-white/95 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[12px_0_36px_rgba(0,0,0,0.24)] dark:backdrop-blur-xl lg:flex lg:w-[var(--image-chat-left-panel-width)] lg:border-b-0 lg:border-r"
           style={leftPanelStyle}
         >
           <button
@@ -1048,7 +1106,66 @@ export function ImageChatPage() {
 
         <section className="flex min-w-0 flex-col bg-slate-100 dark:bg-[#0b1220] lg:min-h-0 lg:flex-1 lg:overflow-hidden">
           <div className="flex flex-col p-3 pb-2 lg:min-h-0 lg:flex-1">
-            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2 lg:hidden">
+              <button
+                ref={mobileSessionButtonRef}
+                type="button"
+                onClick={() => setMobileSessionDrawerOpen(true)}
+                aria-label={t("chat.openSessionDrawer")}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors active:scale-[0.98] hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-200 dark:hover:border-violet-400/60 dark:hover:text-violet-100"
+              >
+                <Menu size={18} />
+              </button>
+              <div className="min-w-0 flex-1 text-center">
+                {renameEnabled ? (
+                  <input
+                    value={titleDraft}
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        handleRename();
+                      }
+                      if (event.key === "Escape") {
+                        setRenameEnabled(false);
+                        setTitleDraft(imageSession?.title ?? "");
+                      }
+                    }}
+                    disabled={renameSessionMutation.isPending}
+                    aria-label={t("chat.rename")}
+                    className="h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-center text-sm font-semibold text-slate-950 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500 dark:border-violet-400/45 dark:bg-slate-950/80 dark:text-white dark:focus:border-violet-300 dark:focus:ring-violet-400/20"
+                  />
+                ) : (
+                  <>
+                    <div className="truncate text-sm font-semibold text-slate-950 dark:text-white">
+                      {imageSession?.title ?? t("chat.workbench")}
+                    </div>
+                    <div className="truncate text-xs text-slate-500 dark:text-slate-400">{generationSummary}</div>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (renameEnabled) {
+                    handleRename();
+                    return;
+                  }
+                  setRenameEnabled(true);
+                }}
+                disabled={!selectedSessionId || renameSessionMutation.isPending}
+                aria-label={renameEnabled ? t("chat.saveSessionName") : t("chat.rename")}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
+              >
+                {renameSessionMutation.isPending ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : renameEnabled ? (
+                  <Save size={17} />
+                ) : (
+                  <Pencil size={16} />
+                )}
+              </button>
+            </div>
+            <div className="mb-3 hidden flex-col gap-3 lg:flex lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-300">
                   <span className="inline-flex h-7 items-center rounded-full bg-white px-3 shadow-sm ring-1 ring-slate-200 dark:border dark:border-violet-400/30 dark:bg-slate-950/70 dark:text-violet-100 dark:ring-violet-400/20">
@@ -1113,32 +1230,62 @@ export function ImageChatPage() {
               </div>
             </div>
 
-            <div className="relative flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm max-h-[72vh] dark:border-slate-600/80 dark:bg-[#121b2d] dark:shadow-[0_0_0_1px_rgba(139,92,246,0.10),0_24px_80px_rgba(0,0,0,0.35)] lg:min-h-[360px] lg:max-h-none">
+            <div className="relative flex min-h-[50dvh] flex-1 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm max-h-[58dvh] dark:border-slate-600/80 dark:bg-[#121b2d] dark:shadow-[0_0_0_1px_rgba(139,92,246,0.10),0_24px_80px_rgba(0,0,0,0.35)] lg:min-h-[360px] lg:max-h-none">
               <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:20px_20px] dark:bg-[radial-gradient(rgba(148,163,184,0.26)_1px,transparent_1px)]" />
               <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 px-5 py-4">
                 {selectedRound ? (
-                  <div className="min-w-0 max-w-[calc(100%-5.5rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:bg-slate-950/82 dark:text-slate-200 dark:ring-slate-700">
+                  <div className="hidden min-w-0 max-w-[calc(100%-5.5rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:bg-slate-950/82 dark:text-slate-200 dark:ring-slate-700 lg:block">
                     {formatDateTime(selectedRound.created_at)} · {selectedRound.model_name}
                   </div>
                 ) : selectedPlaceholder ? (
-                  <div className="min-w-0 max-w-[calc(100%-5.5rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:bg-slate-950/82 dark:text-slate-200 dark:ring-slate-700">
+                  <div className="hidden min-w-0 max-w-[calc(100%-5.5rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:bg-slate-950/82 dark:text-slate-200 dark:ring-slate-700 lg:block">
                     {placeholderStatusLabel(selectedPlaceholder, t)} · {formatImageSizeValue(selectedPlaceholder.size)}
                   </div>
                 ) : (
-                  <div className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:border dark:border-violet-400/35 dark:bg-slate-950/82 dark:text-violet-100 dark:ring-violet-400/20">
+                  <div className="hidden rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:border dark:border-violet-400/35 dark:bg-slate-950/82 dark:text-violet-100 dark:ring-violet-400/20 lg:block">
                     {t("chat.waitingFirstResult")}
                   </div>
                 )}
-                {branchBaseRound ? (
-                  <div className="inline-flex h-8 items-center gap-1.5 rounded-full bg-indigo-600 px-3 text-xs font-semibold text-white shadow-sm shadow-indigo-500/20 dark:bg-violet-500/20 dark:text-violet-100 dark:ring-1 dark:ring-violet-400/40">
-                    <Layers3 size={13} />
-                    {t("chat.baseSelected")}
-                  </div>
-                ) : null}
+                <div className="hidden shrink-0 items-center gap-2 lg:flex">
+                  {selectedRound ? (
+                    <>
+                      <a
+                        href={api.toApiUrl(selectedRound.generated_asset.download_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={t("chat.downloadCurrent")}
+                        aria-label={t("chat.downloadCurrent")}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm backdrop-blur transition-colors active:scale-[0.98] hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/82 dark:text-slate-200 dark:hover:border-violet-400/60 dark:hover:text-violet-100 lg:hidden"
+                      >
+                        <Download size={16} />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleSaveSelectedToGallery}
+                        disabled={saveGalleryMutation.isPending}
+                        title={t("chat.saveSelectedGallery")}
+                        aria-label={t("chat.saveSelectedGallery")}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 ring-1 ring-indigo-500 transition-colors active:scale-[0.98] hover:bg-indigo-700 disabled:opacity-60 dark:bg-gradient-to-r dark:from-indigo-500 dark:to-violet-500 dark:shadow-violet-900/35 dark:ring-violet-300/35 lg:hidden"
+                      >
+                        {saveGalleryMutation.isPending ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <GalleryHorizontalEnd size={16} />
+                        )}
+                      </button>
+                    </>
+                  ) : null}
+                  {branchBaseRound ? (
+                    <div className="hidden h-8 items-center gap-1.5 rounded-full bg-indigo-600 px-3 text-xs font-semibold text-white shadow-sm shadow-indigo-500/20 dark:bg-violet-500/20 dark:text-violet-100 dark:ring-1 dark:ring-violet-400/40 sm:inline-flex">
+                      <Layers3 size={13} />
+                      {t("chat.baseSelected")}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               {selectedRound ? (
-                <div className="relative z-0 flex h-full min-h-0 w-full items-center justify-center px-2 pb-2 pt-12 sm:px-3 sm:pb-3 sm:pt-14">
+                <div className="absolute inset-0 z-0 flex min-h-0 w-full items-center justify-center px-2 py-2 sm:px-3 sm:py-3 lg:pt-14">
                   <button
                     type="button"
                     onClick={() => setPreviewRound(selectedRound)}
@@ -1224,7 +1371,7 @@ export function ImageChatPage() {
             </div>
 
             {historyBranches.length ? (
-              <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1" onWheel={handleHistoryWheelScroll}>
+              <div className="image-chat-history-scroll flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto pb-1" onWheel={handleHistoryWheelScroll}>
                 {historyBranches.map((branch) => (
                   <HistoryBranchStrip
                     key={branch.id}
@@ -1257,7 +1404,7 @@ export function ImageChatPage() {
         </section>
 
         <aside
-          className="relative flex w-full shrink-0 flex-col border-t border-slate-200 bg-white dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[-12px_0_36px_rgba(0,0,0,0.24)] dark:backdrop-blur-xl lg:w-[var(--image-chat-right-panel-width)] lg:border-l lg:border-t-0"
+          className="relative hidden w-full shrink-0 flex-col border-t border-slate-200 bg-white dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[-12px_0_36px_rgba(0,0,0,0.24)] dark:backdrop-blur-xl lg:flex lg:w-[var(--image-chat-right-panel-width)] lg:border-l lg:border-t-0"
           style={rightPanelStyle}
         >
           <button
@@ -1417,6 +1564,266 @@ export function ImageChatPage() {
           </div>
         </aside>
       </main>
+      <Drawer.Root
+        direction="left"
+        open={mobileSessionDrawerOpen}
+        onOpenChange={(open) => {
+          setMobileSessionDrawerOpen(open);
+          if (!open) {
+            mobileSessionButtonRef.current?.focus();
+          }
+        }}
+      >
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-slate-950/45 backdrop-blur-[2px] lg:hidden" />
+          <Drawer.Content className="fixed inset-y-0 left-0 z-[71] flex w-[min(86vw,360px)] flex-col border-r border-slate-200 bg-white shadow-2xl outline-none dark:border-slate-700 dark:bg-[#0f1726] lg:hidden">
+            <Drawer.Title className="sr-only">{t("chat.mobileSessionDrawer")}</Drawer.Title>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800">
+              <div>
+                <div className="text-sm font-semibold text-slate-950 dark:text-white">{t("chat.sessions")}</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t("chat.count", { count: sessionItems.length })}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => createSessionMutation.mutate()}
+                  disabled={createSessionMutation.isPending}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 transition-colors active:scale-[0.98] hover:bg-indigo-500 disabled:opacity-60 dark:bg-gradient-to-br dark:from-indigo-500 dark:to-violet-500 dark:shadow-violet-900/35 dark:ring-1 dark:ring-violet-300/30"
+                  aria-label={t("chat.newSession")}
+                >
+                  {createSessionMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={18} />}
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("chat.closeSessionDrawer")}
+                  onClick={() => {
+                    setMobileSessionDrawerOpen(false);
+                    mobileSessionButtonRef.current?.focus();
+                  }}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition-colors active:scale-[0.98] hover:border-slate-300 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {sessionsQuery.isLoading ? (
+                <div className="flex justify-center py-12 text-slate-400">
+                  <Loader2 size={18} className="animate-spin" />
+                </div>
+              ) : sessionItems.length ? (
+                sessionItems.map((item) => {
+                  const active = item.id === selectedSessionId;
+                  const deleting = deleteSessionMutation.isPending && deleteSessionMutation.variables === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`group relative overflow-hidden rounded-2xl border transition-all ${
+                        active
+                          ? "border-indigo-300 bg-indigo-50 shadow-sm shadow-indigo-100 ring-1 ring-indigo-200/80 dark:border-violet-500/80 dark:bg-violet-500/14 dark:shadow-violet-950/30 dark:ring-violet-400/45"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700/75 dark:bg-[#151f33] dark:hover:border-violet-500/45 dark:hover:bg-[#1a2740]"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSession(item.id)}
+                        className="flex min-h-20 w-full items-center gap-3 p-2.5 pr-12 text-left active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-violet-400"
+                      >
+                        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-1 ring-slate-200 dark:bg-[#0a1020] dark:text-slate-400 dark:ring-slate-600/80">
+                          {item.latest_generated_asset ? (
+                            <img
+                              src={api.toApiUrl(item.latest_generated_asset.thumbnail_url)}
+                              alt={item.title}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <MessagesSquare size={18} />
+                          )}
+                          {active ? <div className="absolute inset-0 ring-2 ring-inset ring-indigo-500/60 dark:ring-violet-400/80" /> : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className={`truncate text-sm font-semibold ${active ? "text-indigo-950 dark:text-white" : "text-slate-900 dark:text-slate-100"}`}>
+                            {item.title}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-300">
+                            <History size={11} />
+                            <span>{t("chat.roundCount", { count: item.rounds_count })}</span>
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-slate-400 dark:text-slate-500">{formatDateTime(item.updated_at)}</div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("chat.deleteSession")}
+                        onClick={() => handleDeleteSession(item.id)}
+                        disabled={deleting || !deletionEnabled}
+                        title={deletionEnabled ? t("chat.deleteSession") : t("chat.deleteDisabled")}
+                        className="absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/95 text-slate-400 shadow-sm ring-1 ring-slate-200 transition-colors active:scale-[0.98] hover:text-red-600 disabled:opacity-60 dark:bg-slate-950/88 dark:text-slate-400 dark:ring-slate-700 dark:hover:text-red-300"
+                      >
+                        {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={15} />}
+                      </button>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  {t("chat.noSessions")}
+                </div>
+              )}
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+
+      <div className="fixed inset-x-0 z-40 px-3 lg:hidden" style={{ bottom: "calc(4.1rem + env(safe-area-inset-bottom))" }}>
+        <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_-6px_18px_rgba(15,23,42,0.12)] dark:border-slate-700 dark:bg-slate-950 dark:shadow-[0_-12px_28px_rgba(0,0,0,0.30)]">
+          <button
+            ref={mobileSettingsButtonRef}
+            type="button"
+            onClick={() => setMobileGenerationSheetOpen(true)}
+            className="flex min-h-11 w-full min-w-0 items-center rounded-xl bg-indigo-600 px-3 text-left text-white shadow-md shadow-indigo-600/16 transition-colors hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-violet-600 dark:shadow-violet-900/35 dark:ring-1 dark:ring-violet-300/35 dark:focus-visible:ring-violet-300"
+            aria-label={t("chat.openGenerationSheet")}
+          >
+            <Sparkles size={17} className="mr-2 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold leading-5">{t("chat.mobileGenerate")}</span>
+              <span className="block truncate text-xs leading-4 text-indigo-100 dark:text-violet-100">{generationSummary}</span>
+            </span>
+            <ChevronRight size={17} className="ml-2 shrink-0 text-indigo-100 dark:text-violet-100" />
+          </button>
+        </div>
+      </div>
+
+      <Drawer.Root
+        direction="bottom"
+        handleOnly
+        open={mobileGenerationSheetOpen}
+        onOpenChange={(open) => {
+          setMobileGenerationSheetOpen(open);
+          if (!open) {
+            mobileSettingsButtonRef.current?.focus();
+          }
+        }}
+      >
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-slate-950/42 lg:hidden" />
+          <Drawer.Content className="mobile-generation-sheet fixed inset-x-0 bottom-0 z-[71] flex max-h-[80dvh] flex-col rounded-t-[1.5rem] border-t border-slate-200 bg-white shadow-[0_-12px_34px_rgba(15,23,42,0.16)] outline-none dark:border-slate-700 dark:bg-[#0f1726] dark:shadow-[0_-18px_42px_rgba(0,0,0,0.34)] lg:hidden">
+            <Drawer.Title className="sr-only">{t("chat.mobileGenerationSheet")}</Drawer.Title>
+            <Drawer.Handle className="mx-auto mt-2 flex h-7 w-24 items-center justify-center rounded-full text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-500 dark:focus-visible:ring-violet-400">
+              <span className="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-slate-600" />
+            </Drawer.Handle>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
+
+              <ImageGenerationSettingsTabs
+                value={settingsTab}
+                onChange={setSettingsTab}
+                basic={
+                  <div className="space-y-4">
+                    <ProductAssociationPanel
+                      isProductMode={isProductMode}
+                      product={productQuery.data}
+                      products={products}
+                      targetProductId={targetProductId}
+                      sourceImage={sourceImage}
+                      referenceImages={productReferenceImages}
+                      selectedRound={selectedRound}
+                      attachBusy={attachMutation.isPending}
+                      deletingReferenceAssetId={
+                        deleteProductReferenceMutation.isPending ? (deleteProductReferenceMutation.variables ?? null) : null
+                      }
+                      onTargetProductChange={setTargetProductId}
+                      onDeleteReference={handleDeleteProductReference}
+                      onAttach={handleAttach}
+                      t={t}
+                    />
+
+                    <SessionReferencePanel
+                      assets={sessionReferenceAssets}
+                      selectedAssetIds={selectedReferenceAssetIds}
+                      maxSelectedCount={maxSelectedReferenceCount}
+                      uploadBusy={uploadReferenceMutation.isPending}
+                      deletingAssetId={
+                        deleteSessionReferenceMutation.isPending
+                          ? (deleteSessionReferenceMutation.variables?.assetId ?? null)
+                          : null
+                      }
+                      disabled={!selectedSessionId}
+                      onFiles={handleUploadReferenceFiles}
+                      onToggle={handleReferenceToggle}
+                      onDelete={handleDeleteSessionReference}
+                      t={t}
+                    />
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-950 dark:text-white" htmlFor="image-chat-prompt-mobile">
+                        {t("chat.prompt")}
+                      </label>
+                      <textarea
+                        id="image-chat-prompt-mobile"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        rows={6}
+                        placeholder={isProductMode ? t("chat.productPromptPlaceholder") : t("chat.freePromptPlaceholder")}
+                        className="w-full resize-none rounded-2xl border border-slate-200 px-3 py-3 text-sm leading-6 text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400/20"
+                      />
+                    </div>
+
+                    <ImageGenerationSettingsPanel
+                      size={size}
+                      sizeOptions={sizeOptions}
+                      maxDimension={imageGenerationMaxDimension}
+                      toolOptions={toolOptions}
+                      allowedToolFields={imageToolAllowedFields}
+                      generationCount={generationCount}
+                      generationCountOptions={[1, 2, 3, 4]}
+                      onSizeChange={setSize}
+                      onToolOptionsChange={setToolOptions}
+                      onGenerationCountChange={(count) => setGenerationCount(clampGenerationCount(count))}
+                      showToolOptions={false}
+                    />
+                  </div>
+                }
+                advanced={
+                  <ImageToolControls value={toolOptions} allowedFields={imageToolAllowedFields} onChange={setToolOptions} />
+                }
+              />
+
+              <div className="mt-4 space-y-3">
+                {successMessage ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    {successMessage}
+                  </div>
+                ) : null}
+                {errorMessage ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">{errorMessage}</div>
+                ) : null}
+              </div>
+            </div>
+            <div className="border-t border-slate-200 bg-white/96 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:border-slate-800 dark:bg-slate-950/94">
+              {baseRequirementMessage ? (
+                <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
+                  {baseRequirementMessage}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generateDisabled}
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-indigo-600 px-4 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors active:scale-[0.98] hover:bg-indigo-500 disabled:opacity-60 dark:bg-gradient-to-r dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500 dark:shadow-violet-900/45 dark:ring-1 dark:ring-violet-300/35"
+              >
+                {generateMutation.isPending ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Sparkles size={15} className="mr-2" />}
+                {generateMutation.isPending
+                  ? t("chat.submitting")
+                  : generationCount > 1
+                    ? t("chat.startGenerateCount", { count: generationCount })
+                    : t("chat.startGenerate")}
+              </button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
       {promptPreview ? (
         <PromptPreviewDialog preview={promptPreview} onClose={() => setPromptPreview(null)} />
       ) : null}
@@ -1585,13 +1992,22 @@ function HistoryBranchStrip({
 
   return (
     <div
-      className="relative flex h-full shrink-0 gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-700/80 dark:bg-[#151f33]"
-      style={{ marginLeft: depthOffset }}
+      className="relative flex w-max shrink-0 snap-start flex-col gap-1.5 rounded-2xl lg:ml-[var(--branch-depth-offset)] lg:h-full lg:flex-row lg:gap-2 lg:border lg:border-slate-200 lg:bg-slate-50/80 lg:p-2 lg:dark:border-slate-700/80 lg:dark:bg-[#151f33]"
+      style={{ "--branch-depth-offset": `${depthOffset}px` } as CSSProperties}
     >
       {branch.depth > 0 ? (
-        <div className="pointer-events-none absolute -left-3 top-1/2 h-px w-3 bg-slate-300 dark:bg-slate-700" />
+        <div className="pointer-events-none absolute -left-3 top-1/2 hidden h-px w-3 bg-slate-300 dark:bg-slate-700 lg:block" />
       ) : null}
-      <div className="flex w-28 shrink-0 flex-col justify-between rounded-xl bg-white p-2 text-xs text-slate-500 ring-1 ring-slate-200 dark:bg-[#0b1220] dark:text-slate-400 dark:ring-slate-600/80">
+      <div className="flex w-max items-center gap-1.5 px-0.5 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
+        <div className="flex min-w-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white/86 px-2 py-1 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]/88">
+          <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100">
+            {branch.depth > 0 ? <Layers3 size={12} /> : <History size={12} />}
+            {branchLabel}
+          </span>
+          <span>{t("chat.imageCount", { count: branch.candidates.length })}</span>
+        </div>
+      </div>
+      <div className="hidden w-28 shrink-0 flex-col justify-between rounded-xl bg-white p-2 text-xs text-slate-500 ring-1 ring-slate-200 dark:bg-[#0b1220] dark:text-slate-400 dark:ring-slate-600/80 lg:flex">
         <div>
           <div className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100">
             {branch.depth > 0 ? <Layers3 size={12} /> : <History size={12} />}
@@ -1608,23 +2024,25 @@ function HistoryBranchStrip({
               meta: `${t("chat.imageCount", { count: branch.candidates.length })} · ${formatDateTime(branch.created_at)}`,
             })
           }
-          className="line-clamp-3 rounded-md text-left text-[11px] leading-4 text-slate-400 transition-colors hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-500 dark:hover:text-violet-200"
+          className="hidden rounded-md text-left text-[11px] leading-4 text-slate-400 transition-colors hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-500 dark:hover:text-violet-200 lg:line-clamp-3"
         >
           {branch.prompt}
         </button>
       </div>
-      {branch.candidates.map((candidate) => (
-        <HistoryCandidateCard
-          key={candidate.id}
-          candidate={candidate}
-          selectedGeneratedAssetId={selectedGeneratedAssetId}
-          selectedTaskPlaceholderId={selectedTaskPlaceholderId}
-          branchBaseAssetId={branchBaseAssetId}
-          onSelectRound={onSelectRound}
-          onSelectPlaceholder={onSelectPlaceholder}
-          t={t}
-        />
-      ))}
+      <div className="flex w-max shrink-0 gap-2 lg:min-h-0 lg:flex-1">
+        {branch.candidates.map((candidate) => (
+          <HistoryCandidateCard
+            key={candidate.id}
+            candidate={candidate}
+            selectedGeneratedAssetId={selectedGeneratedAssetId}
+            selectedTaskPlaceholderId={selectedTaskPlaceholderId}
+            branchBaseAssetId={branchBaseAssetId}
+            onSelectRound={onSelectRound}
+            onSelectPlaceholder={onSelectPlaceholder}
+            t={t}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1651,7 +2069,7 @@ function HistoryCandidateCard({
     const running = candidate.status === "queued" || candidate.status === "running";
     return (
       <div
-        className={`group/card relative aspect-square h-full min-w-[7rem] shrink-0 overflow-hidden rounded-2xl border bg-white transition-all dark:bg-[#0b1220] ${
+        className={`group/card relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border bg-white transition-all dark:bg-[#0b1220] lg:aspect-square lg:h-full lg:w-auto lg:min-w-[7rem] lg:rounded-2xl ${
           active
             ? "border-indigo-400 ring-2 ring-indigo-200 dark:border-violet-400 dark:ring-violet-400/45"
             : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-violet-400/45"
@@ -1669,13 +2087,13 @@ function HistoryCandidateCard({
             {active ? <Check size={13} className="shrink-0 text-indigo-600" /> : null}
           </div>
           <div className="flex flex-1 items-center justify-center">
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-indigo-600 ring-1 ring-slate-200 dark:bg-violet-500/12 dark:text-violet-200 dark:ring-violet-400/30">
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-indigo-600 ring-1 ring-slate-200 dark:bg-violet-500/12 dark:text-violet-200 dark:ring-violet-400/30 lg:h-12 lg:w-12">
               {running ? <Loader2 size={19} className="animate-spin" /> : <Sparkles size={19} />}
             </div>
           </div>
           <div>
             <div className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-100">{placeholderStatusLabel(candidate, t)}</div>
-            <div className="mt-0.5 line-clamp-2 text-[10px] leading-3 text-slate-400 dark:text-slate-500">{candidate.prompt}</div>
+            <div className="mt-0.5 hidden text-[10px] leading-3 text-slate-400 dark:text-slate-500 lg:line-clamp-2">{candidate.prompt}</div>
           </div>
         </button>
       </div>
@@ -1687,7 +2105,7 @@ function HistoryCandidateCard({
   const asBase = round.generated_asset.id === branchBaseAssetId;
   return (
     <div
-        className={`group/card relative aspect-square h-full min-w-[7rem] shrink-0 overflow-hidden rounded-2xl border bg-white transition-all dark:bg-[#0b1220] ${
+      className={`group/card relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border bg-white transition-all dark:bg-[#0b1220] lg:aspect-square lg:h-full lg:w-auto lg:min-w-[7rem] lg:rounded-2xl ${
         active
           ? "border-indigo-400 ring-2 ring-indigo-200 dark:border-violet-400 dark:ring-violet-400/45"
           : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-violet-400/45"
