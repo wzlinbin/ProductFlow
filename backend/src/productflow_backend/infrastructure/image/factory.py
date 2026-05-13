@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from productflow_backend.config import get_runtime_settings
 from productflow_backend.infrastructure.image.base import ImageProvider
+from productflow_backend.infrastructure.image.images_provider import OpenAIImagesImageProvider
 from productflow_backend.infrastructure.image.mock_provider import MockImageProvider
 from productflow_backend.infrastructure.image.responses_provider import OpenAIResponsesImageProvider
 
@@ -13,4 +14,6 @@ def get_image_provider() -> ImageProvider:
         return MockImageProvider()
     if settings.image_provider_kind == "openai_responses":
         return OpenAIResponsesImageProvider()
+    if settings.image_provider_kind == "openai_images":
+        return OpenAIImagesImageProvider()
     raise RuntimeError(f"暂不支持的图片 provider: {settings.image_provider_kind}")
