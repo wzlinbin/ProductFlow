@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
+  Check,
   CheckCircle2,
   Image,
   KeyRound,
+  Link2,
+  Pencil,
+  Plus,
   Loader2,
   LockKeyhole,
   MessageSquareText,
@@ -18,10 +22,12 @@ import {
   SlidersHorizontal,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SelectField } from "../components/SelectField";
 import { TopNav } from "../components/TopNav";
 import { api, ApiError } from "../lib/api";
@@ -34,6 +40,8 @@ import type {
   ProviderCapability,
   ProviderConfigResponse,
   ProviderProfile,
+  ProviderProfileCreateRequest,
+  ProviderProfileUpdateRequest,
 } from "../lib/types";
 
 type DraftValue = string | boolean | string[];
@@ -56,12 +64,23 @@ interface SettingsSection {
   icon: LucideIcon;
 }
 
-interface ProviderProfileFormState {
+export interface ProviderProfileFormState {
   name: string;
   base_url: string;
   api_key: string;
   capabilities: ProviderCapability[];
   enabled: boolean;
+}
+
+export interface ProviderProfileUsage {
+  text: boolean;
+  image: boolean;
+}
+
+export interface ProviderDrawerViewState {
+  open: boolean;
+  editingProfileId: string | null;
+  form: ProviderProfileFormState;
 }
 
 interface TextBindingDraft {
@@ -100,6 +119,12 @@ const PANEL_CLASS =
 const SETTINGS_MAIN_ACTION_CLASS =
   "inline-flex h-11 items-center justify-center rounded-lg bg-indigo-600 px-5 text-sm font-semibold text-white " +
   "shadow-sm shadow-indigo-500/25 hover:bg-indigo-500 disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400";
+
+const PROVIDER_DRAWER_INPUT_CLASS =
+  "h-[43px] w-full rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-950 " +
+  "placeholder:text-slate-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 " +
+  "dark:border-slate-700 dark:bg-[#192234] dark:text-slate-100 dark:placeholder:text-slate-500 " +
+  "dark:focus:border-violet-500 dark:focus:ring-violet-500/35";
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
   {
@@ -267,7 +292,7 @@ function boolValue(record: Record<string, unknown> | undefined, key: string, fal
   return typeof value === "boolean" ? value : fallback;
 }
 
-function providerFormFromProfile(profile?: ProviderProfile | null): ProviderProfileFormState {
+export function providerFormFromProfile(profile?: ProviderProfile | null): ProviderProfileFormState {
   if (!profile) {
     return EMPTY_PROVIDER_FORM;
   }
@@ -277,6 +302,64 @@ function providerFormFromProfile(profile?: ProviderProfile | null): ProviderProf
     api_key: "",
     capabilities: profile.capabilities,
     enabled: profile.enabled,
+  };
+}
+
+export function providerDrawerCreateState(): ProviderDrawerViewState {
+  return {
+    open: true,
+    editingProfileId: null,
+    form: EMPTY_PROVIDER_FORM,
+  };
+}
+
+export function providerDrawerEditState(profile: ProviderProfile): ProviderDrawerViewState {
+  return {
+    open: true,
+    editingProfileId: profile.id,
+    form: providerFormFromProfile(profile),
+  };
+}
+
+export function providerUsageFromBindings(bindings: ProviderBinding[], profileId: string): ProviderProfileUsage {
+  return {
+    text: bindings.some((binding) => binding.purpose === "text" && binding.provider_profile_id === profileId),
+    image: bindings.some((binding) => binding.purpose === "image" && binding.provider_profile_id === profileId),
+  };
+}
+
+export function providerUsageLabelKeys(usage: ProviderProfileUsage): TranslationKey[] {
+  const labels: TranslationKey[] = [];
+  if (usage.text) {
+    labels.push("settings.provider.usageText");
+  }
+  if (usage.image) {
+    labels.push("settings.provider.usageImage");
+  }
+  return labels;
+}
+
+export function providerDisableBlocked(profile: ProviderProfile, usage: ProviderProfileUsage): boolean {
+  return profile.enabled && (usage.text || usage.image);
+}
+
+export function providerProfileCreatePayload(form: ProviderProfileFormState): ProviderProfileCreateRequest {
+  return {
+    name: form.name.trim(),
+    base_url: form.base_url.trim() || null,
+    api_key: form.api_key.trim() || null,
+    capabilities: form.capabilities,
+    enabled: form.enabled,
+  };
+}
+
+export function providerProfileUpdatePayload(form: ProviderProfileFormState): ProviderProfileUpdateRequest {
+  return {
+    name: form.name.trim(),
+    base_url: form.base_url.trim() || null,
+    api_key: form.api_key,
+    capabilities: form.capabilities,
+    enabled: form.enabled,
   };
 }
 
@@ -345,11 +428,20 @@ interface ConfigFieldProps {
   value: DraftValue;
   secretTouched: boolean;
   isResetting: boolean;
+  layout?: "row" | "card";
   onChange: (value: DraftValue, touchedSecret?: boolean) => void;
   onReset: () => void;
 }
 
-function ConfigField({ item, value, secretTouched, isResetting, onChange, onReset }: ConfigFieldProps) {
+function ConfigField({
+  item,
+  value,
+  secretTouched,
+  isResetting,
+  layout = "row",
+  onChange,
+  onReset,
+}: ConfigFieldProps) {
   const { t } = useI18n();
   const selectedMultiValues = Array.isArray(value) ? value : [];
   const toggleMultiValue = (optionValue: string) => {
@@ -415,6 +507,42 @@ function ConfigField({ item, value, secretTouched, isResetting, onChange, onRese
       />
     );
 
+  if (layout === "card") {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-[#0f1726] dark:shadow-black/20">
+        <div className="flex items-start justify-between gap-3">
+          <label htmlFor={item.key} className="min-w-0 text-sm font-semibold text-zinc-950 dark:text-white">
+            {item.label}
+          </label>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${sourceClassName(item)}`}>
+            {sourceLabel(item, t)}
+          </span>
+        </div>
+        <div className="mt-3">{control}</div>
+        <div className="mt-2 flex min-h-5 items-start justify-between gap-3">
+          <div>
+            <div className="font-mono text-[11px] text-zinc-400 dark:text-slate-500">{item.key}</div>
+            {item.secret && secretTouched ? (
+              <div className="mt-1 text-xs text-amber-600 dark:text-amber-300">{t("settings.writeNewSecret")}</div>
+            ) : null}
+          </div>
+          {item.source === "database" ? (
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={isResetting}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-slate-100 hover:text-zinc-900 disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-white"
+              aria-label={t("settings.restoreDefault")}
+              title={t("settings.restoreDefault")}
+            >
+              {isResetting ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-3 border-t border-slate-100 py-5 first:border-t-0 dark:border-slate-800 md:grid-cols-[220px_minmax(0,1fr)]">
       <div>
@@ -458,200 +586,568 @@ interface ProvidersSectionProps {
   data: ProviderConfigResponse | undefined;
   profileForm: ProviderProfileFormState;
   editingProfileId: string | null;
+  drawerOpen: boolean;
   pending: boolean;
+  togglingProfileId: string | null;
   onProfileFormChange: (next: ProviderProfileFormState) => void;
+  onOpenCreate: () => void;
   onEditProfile: (profile: ProviderProfile) => void;
-  onCancelEdit: () => void;
+  onCloseDrawer: () => void;
   onSubmitProfile: () => void;
-  onArchiveProfile: (profileId: string) => void;
+  onDeleteProfile: (profile: ProviderProfile) => void;
+  onToggleProfileEnabled: (profileId: string, enabled: boolean) => void;
 }
 
 function ProvidersSection({
   data,
   profileForm,
   editingProfileId,
+  drawerOpen,
   pending,
+  togglingProfileId,
   onProfileFormChange,
+  onOpenCreate,
   onEditProfile,
-  onCancelEdit,
+  onCloseDrawer,
   onSubmitProfile,
-  onArchiveProfile,
+  onDeleteProfile,
+  onToggleProfileEnabled,
 }: ProvidersSectionProps) {
   const { t } = useI18n();
-  const profiles = data?.profiles ?? [];
+  const profiles = (data?.profiles ?? []).filter((profile) => !profile.archived_at);
+  const editingProfile = editingProfileId
+    ? profiles.find((profile) => profile.id === editingProfileId)
+    : undefined;
+  const editingProfileUsage = editingProfile
+    ? providerUsageFromBindings(data?.bindings ?? [], editingProfile.id)
+    : undefined;
+  const editingProfileDisableBlocked =
+    editingProfile && editingProfileUsage ? providerDisableBlocked(editingProfile, editingProfileUsage) : false;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-slate-950 dark:text-white">
+            {t("settings.provider.listTitle")}
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+            {t("settings.provider.listDescription")}
+          </p>
+        </div>
+        <button type="button" onClick={onOpenCreate} className={SETTINGS_MAIN_ACTION_CLASS}>
+          <Plus size={14} className="mr-2" />
+          {t("settings.provider.create")}
+        </button>
+      </div>
+
+      {profiles.length ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {profiles.map((profile) => {
+            const usage = providerUsageFromBindings(data?.bindings ?? [], profile.id);
+            return (
+              <ProviderProfileCard
+                key={profile.id}
+                profile={profile}
+                usage={usage}
+                pending={pending}
+                toggling={togglingProfileId === profile.id}
+                onEdit={() => onEditProfile(profile)}
+                onDelete={() => onDeleteProfile(profile)}
+                onToggleEnabled={(enabled) => onToggleProfileEnabled(profile.id, enabled)}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 text-center shadow-sm shadow-slate-200/60 dark:border-slate-700 dark:bg-[#0f1726] dark:shadow-black/25">
+          <Box size={42} className="text-slate-500" />
+          <div className="mt-5 text-base font-semibold text-slate-950 dark:text-white">
+            {t("settings.provider.emptyTitle")}
+          </div>
+          <p className="mt-3 max-w-sm text-sm leading-6 text-slate-500 dark:text-slate-400">
+            {t("settings.provider.emptyDescription")}
+          </p>
+          <button type="button" onClick={onOpenCreate} className={`${SETTINGS_MAIN_ACTION_CLASS} mt-6`}>
+            <Plus size={14} className="mr-2" />
+            {t("settings.provider.create")}
+          </button>
+        </div>
+      )}
+
+      <ProviderProfileDrawer
+        open={drawerOpen}
+        form={profileForm}
+        editingProfileId={editingProfileId}
+        pending={pending}
+        enableToggleBlocked={editingProfileDisableBlocked}
+        onFormChange={onProfileFormChange}
+        onClose={onCloseDrawer}
+        onSubmit={onSubmitProfile}
+      />
+    </div>
+  );
+}
+
+interface ProviderEnabledSwitchProps {
+  checked: boolean;
+  disabled: boolean;
+  loading?: boolean;
+  title?: string;
+  ariaLabel: string;
+  describedBy?: string;
+  onToggle: (checked: boolean) => void;
+}
+
+function ProviderEnabledSwitch({
+  checked,
+  disabled,
+  loading = false,
+  title,
+  ariaLabel,
+  describedBy,
+  onToggle,
+}: ProviderEnabledSwitchProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      aria-describedby={describedBy}
+      title={title}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle(!checked);
+      }}
+      onKeyDown={(event) => event.stopPropagation()}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${
+        checked
+          ? "border-indigo-500 bg-indigo-600 dark:border-violet-400 dark:bg-violet-500"
+          : "border-slate-300 bg-slate-200 dark:border-slate-700 dark:bg-slate-800"
+      } ${disabled ? "cursor-not-allowed opacity-55" : "hover:brightness-105"}`}
+    >
+      <span
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm transition ${
+          checked ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      >
+        {loading ? <Loader2 size={12} className="animate-spin" /> : null}
+      </span>
+    </button>
+  );
+}
+
+interface ProviderProfileCardProps {
+  profile: ProviderProfile;
+  usage: ProviderProfileUsage;
+  pending: boolean;
+  toggling: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleEnabled: (enabled: boolean) => void;
+}
+
+function ProviderProfileCard({
+  profile,
+  usage,
+  pending,
+  toggling,
+  onEdit,
+  onDelete,
+  onToggleEnabled,
+}: ProviderProfileCardProps) {
+  const { t } = useI18n();
+  const usageLabelKeys = providerUsageLabelKeys(usage);
+  const disableBlocked = providerDisableBlocked(profile, usage);
+  const blockHelpId = `${profile.id}-disable-help`;
+  const switchHelp = disableBlocked ? t("settings.provider.disableBlocked") : undefined;
+
+  return (
+    <div className="group relative flex min-h-[230px] flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 transition hover:border-indigo-200 hover:shadow-md dark:border-slate-800 dark:bg-[#0f1726] dark:shadow-black/25 dark:hover:border-violet-400/45">
+      <button
+        type="button"
+        onClick={onEdit}
+        className="-m-2 block w-full space-y-4 rounded-lg p-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-violet-400"
+      >
+        <span className="flex items-start justify-between gap-4">
+          <span className="min-w-0 pr-20">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-base font-semibold text-slate-950 dark:text-white">{profile.name}</span>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                  profile.enabled
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-200"
+                    : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                }`}
+              >
+                {profile.enabled ? t("settings.provider.enabled") : t("settings.provider.disabled")}
+              </span>
+            </span>
+            <span className="mt-2 flex items-center gap-1.5 truncate font-mono text-xs text-slate-500 dark:text-slate-400">
+              <ServerCog size={13} className="shrink-0" />
+              <span className="truncate">{profile.base_url || t("settings.provider.defaultBaseUrl")}</span>
+            </span>
+          </span>
+        </span>
+
+        <span className="flex flex-wrap gap-1.5">
+          {profile.capabilities.map((capability) => (
+            <span
+              key={`${profile.id}-${capability}`}
+              className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            >
+              {t(providerCapabilityLabelKey(capability))}
+            </span>
+          ))}
+        </span>
+
+        <span className="flex flex-wrap gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+              profile.has_api_key
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-200"
+                : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/35 dark:bg-amber-500/12 dark:text-amber-200"
+            }`}
+          >
+            <KeyRound size={12} />
+            {profile.has_api_key ? t("settings.provider.keyConfigured") : t("settings.provider.keyMissing")}
+          </span>
+          {usageLabelKeys.length ? (
+            usageLabelKeys.map((labelKey) => (
+              <span
+                key={labelKey}
+                className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 dark:border-violet-400/35 dark:bg-violet-500/12 dark:text-violet-100"
+              >
+                {t(labelKey)}
+              </span>
+            ))
+          ) : (
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {t("settings.provider.usageNone")}
+            </span>
+          )}
+        </span>
+      </button>
+
+      <div className="absolute right-5 top-5 flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:border-indigo-200 hover:text-indigo-700 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400 dark:hover:border-violet-300/50 dark:hover:text-violet-100"
+          aria-label={t("settings.provider.editAria")}
+          title={t("settings.provider.edit")}
+        >
+          <Pencil size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={pending}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:border-red-200 hover:text-red-600 disabled:opacity-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400 dark:hover:border-red-300/50 dark:hover:text-red-200"
+          aria-label={t("settings.provider.deleteAria")}
+          title={t("settings.provider.deleteAria")}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      <div className="mt-5 flex items-start justify-between gap-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div>
+          <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {t("settings.provider.enabledSwitchLabel")}
+          </div>
+          {switchHelp ? (
+            <p id={blockHelpId} className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-200">
+              {switchHelp}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              {t("settings.provider.enabledSwitchHelp")}
+            </p>
+          )}
+        </div>
+        <ProviderEnabledSwitch
+          checked={profile.enabled}
+          disabled={pending || toggling || disableBlocked}
+          loading={toggling}
+          title={switchHelp}
+          ariaLabel={t("settings.provider.enabledSwitchAria")}
+          describedBy={switchHelp ? blockHelpId : undefined}
+          onToggle={onToggleEnabled}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface ProviderCapabilityToggleProps {
+  option: (typeof PROVIDER_CAPABILITY_OPTIONS)[number];
+  selected: boolean;
+  onToggle: () => void;
+}
+
+function ProviderCapabilityToggle({ option, selected, onToggle }: ProviderCapabilityToggleProps) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onToggle}
+      className={`flex h-[46px] items-center gap-3 rounded-xl border px-3 text-left text-sm font-semibold transition ${
+        selected
+          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-violet-500 dark:bg-violet-500/12 dark:text-violet-50"
+          : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-[#171f30] dark:text-slate-300 dark:hover:border-slate-500"
+      }`}
+    >
+      <span
+        className={`grid h-5 w-5 shrink-0 place-items-center rounded-[5px] transition ${
+          selected
+            ? "bg-indigo-600 text-white dark:bg-violet-500"
+            : "bg-slate-200 dark:bg-slate-600"
+        }`}
+      >
+        {selected ? <Check size={13} strokeWidth={3} /> : null}
+      </span>
+      {t(option.labelKey)}
+    </button>
+  );
+}
+
+interface ProviderDrawerTextInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  type?: "text" | "password";
+  icon?: ReactNode;
+  autoComplete?: string;
+}
+
+function ProviderDrawerTextInput({
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  icon,
+  autoComplete,
+}: ProviderDrawerTextInputProps) {
+  return (
+    <div className="relative">
+      {icon ? (
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+          {icon}
+        </span>
+      ) : null}
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`${PROVIDER_DRAWER_INPUT_CLASS} ${icon ? "pl-11" : ""}`}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+      />
+    </div>
+  );
+}
+
+interface ProviderDrawerEnableToggleProps {
+  checked: boolean;
+  disabled: boolean;
+  blocked?: boolean;
+  onToggle: (checked: boolean) => void;
+}
+
+function ProviderDrawerEnableToggle({ checked, disabled, blocked = false, onToggle }: ProviderDrawerEnableToggleProps) {
+  const { t } = useI18n();
+  const helpId = useId();
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={disabled || blocked}
+        aria-pressed={checked}
+        aria-describedby={blocked ? helpId : undefined}
+        onClick={() => onToggle(!checked)}
+        className={`flex h-[46px] w-full items-center gap-3 rounded-xl border px-3 text-left text-sm font-semibold transition ${
+          checked
+            ? "border-indigo-300 bg-indigo-50 text-slate-900 dark:border-slate-700 dark:bg-[#171f30] dark:text-slate-100"
+            : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-[#171f30] dark:text-slate-300"
+        } ${
+          disabled || blocked
+            ? "cursor-not-allowed opacity-60"
+            : "hover:border-indigo-300 dark:hover:border-violet-500/60"
+        }`}
+      >
+        <span
+          className={`grid h-5 w-5 shrink-0 place-items-center rounded-md transition ${
+            checked ? "bg-indigo-600 text-white dark:bg-violet-500" : "bg-slate-200 dark:bg-slate-600"
+          }`}
+        >
+          {checked ? <Check size={13} strokeWidth={3} /> : null}
+        </span>
+        {t("settings.provider.enable")}
+      </button>
+      {blocked ? (
+        <p id={helpId} className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-200">
+          {t("settings.provider.disableBlocked")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+interface ProviderProfileDrawerProps {
+  open: boolean;
+  form: ProviderProfileFormState;
+  editingProfileId: string | null;
+  pending: boolean;
+  enableToggleBlocked: boolean;
+  onFormChange: (next: ProviderProfileFormState) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}
+
+function ProviderProfileDrawer({
+  open,
+  form,
+  editingProfileId,
+  pending,
+  enableToggleBlocked,
+  onFormChange,
+  onClose,
+  onSubmit,
+}: ProviderProfileDrawerProps) {
+  const { t } = useI18n();
+  const titleId = useId();
   const toggleCapability = (capability: ProviderCapability) => {
-    const selected = new Set(profileForm.capabilities);
+    const selected = new Set(form.capabilities);
     if (selected.has(capability)) {
       selected.delete(capability);
     } else {
       selected.add(capability);
     }
-    onProfileFormChange({
-      ...profileForm,
+    onFormChange({
+      ...form,
       capabilities: PROVIDER_CAPABILITY_OPTIONS.map((option) => option.value).filter((value) => selected.has(value)),
     });
   };
 
-  return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
-      <div className={PANEL_CLASS}>
-        {profiles.length ? (
-          <div className="space-y-3">
-            {profiles.map((profile) => (
-              <div
-                key={profile.id}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/35"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEditProfile(profile)}
-                        className="truncate text-left text-sm font-semibold text-slate-950 hover:text-indigo-700 dark:text-white dark:hover:text-violet-200"
-                      >
-                        {profile.name}
-                      </button>
-                      <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-300">
-                        {profile.enabled ? t("settings.provider.enabled") : t("settings.provider.disabled")}
-                      </span>
-                      {profile.archived_at ? (
-                        <span className="rounded-full border border-amber-200 px-2 py-0.5 text-[11px] text-amber-700 dark:border-amber-400/40 dark:text-amber-200">
-                          {t("settings.provider.archived")}
-                        </span>
-                      ) : null}
-                      {profile.has_api_key ? (
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-200">
-                          {t("settings.provider.keyConfigured")}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 truncate font-mono text-xs text-slate-500 dark:text-slate-400">
-                      {profile.base_url || t("settings.provider.defaultBaseUrl")}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {profile.capabilities.map((capability) => (
-                        <span
-                          key={`${profile.id}-${capability}`}
-                          className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                        >
-                          {t(providerCapabilityLabelKey(capability))}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onArchiveProfile(profile.id)}
-                    disabled={pending || Boolean(profile.archived_at)}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:border-red-200 hover:text-red-600 disabled:opacity-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400 dark:hover:border-red-300/50 dark:hover:text-red-200"
-                    aria-label={t("settings.provider.archiveAria")}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 px-6 text-center dark:border-slate-700">
-            <Box size={42} className="text-slate-500" />
-            <div className="mt-5 text-base font-semibold text-slate-950 dark:text-white">
-              {t("settings.provider.emptyTitle")}
-            </div>
-            <p className="mt-3 max-w-sm text-sm leading-6 text-slate-500 dark:text-slate-400">
-              {t("settings.provider.emptyDescription")}
-            </p>
-          </div>
-        )}
-      </div>
+  if (!open) {
+    return null;
+  }
 
-      <div className={PANEL_CLASS}>
-        <div className="mb-4 flex items-center gap-2 text-base font-semibold text-slate-950 dark:text-white">
-          <KeyRound size={16} />
-          {editingProfileId ? t("settings.provider.edit") : t("settings.provider.create")}
-        </div>
-        <div className="space-y-4">
-          <SettingsFormField label={t("settings.provider.nameLabel")}>
-            <input
-              value={profileForm.name}
-              onChange={(event) => onProfileFormChange({ ...profileForm, name: event.target.value })}
-              className={INPUT_CLASS}
-              placeholder={t("settings.provider.namePlaceholder")}
-            />
-          </SettingsFormField>
-          <SettingsFormField label={t("settings.provider.baseUrlLabel")}>
-            <input
-              value={profileForm.base_url}
-              onChange={(event) => onProfileFormChange({ ...profileForm, base_url: event.target.value })}
-              className={`${INPUT_CLASS} font-mono`}
-              placeholder="http://localhost:3000/v1"
-            />
-          </SettingsFormField>
-          <SettingsFormField label={t("settings.provider.apiKeyLabel")}>
-            <input
-              type="password"
-              value={profileForm.api_key}
-              onChange={(event) => onProfileFormChange({ ...profileForm, api_key: event.target.value })}
-              className={INPUT_CLASS}
-              placeholder={
-                editingProfileId
-                  ? t("settings.provider.keepKeyPlaceholder")
-                  : t("settings.provider.apiKeyPlaceholder")
-              }
-              autoComplete="new-password"
-            />
-          </SettingsFormField>
-          <div className="grid gap-2">
-            <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              {t("settings.provider.capabilitiesLabel")}
-            </div>
-            {PROVIDER_CAPABILITY_OPTIONS.map((option) => (
-              <label
-                key={option.value}
-                className="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-[#111b2d] dark:text-slate-300"
-              >
-                <input
-                  type="checkbox"
-                  checked={profileForm.capabilities.includes(option.value)}
-                  onChange={() => toggleCapability(option.value)}
-                  className="h-3.5 w-3.5 accent-indigo-600"
-                />
-                <span>{t(option.labelKey)}</span>
-              </label>
-            ))}
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/55 backdrop-blur-sm">
+      <div
+        className="absolute inset-0 h-full w-full cursor-default"
+        aria-hidden="true"
+        onClick={onClose}
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative flex h-full w-full max-w-full flex-col overflow-hidden bg-white shadow-2xl shadow-slate-950/25 dark:bg-[#121722] sm:max-w-[448px]"
+      >
+        <div className="flex h-[74px] items-center justify-between border-b border-slate-200 px-6 dark:border-slate-800">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="text-indigo-600 dark:text-violet-400">
+              {editingProfileId ? <Pencil size={17} /> : <Plus size={18} />}
+            </span>
+            <h2 id={titleId} className="truncate text-lg font-bold text-slate-950 dark:text-white">
+              {editingProfileId ? t("settings.provider.edit") : t("settings.provider.create")}
+            </h2>
           </div>
-          <label className="inline-flex items-center gap-3 border-t border-slate-100 pt-4 text-sm font-medium text-slate-700 dark:border-slate-800 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={profileForm.enabled}
-              onChange={(event) => onProfileFormChange({ ...profileForm, enabled: event.target.checked })}
-              className="h-4 w-4 accent-indigo-600"
-            />
-            {t("settings.provider.enable")}
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            {editingProfileId ? (
-              <button
-                type="button"
-                onClick={onCancelEdit}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-950 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-white"
-              >
-                {t("common.cancel")}
-              </button>
-            ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-white"
+            aria-label={t("settings.provider.closeDrawer")}
+            title={t("settings.provider.closeDrawer")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6">
+            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {t("settings.provider.basicInfo")}
+            </div>
+            <SettingsFormField label={t("settings.provider.nameLabel")}>
+              <ProviderDrawerTextInput
+                value={form.name}
+                onChange={(name) => onFormChange({ ...form, name })}
+                placeholder={t("settings.provider.namePlaceholder")}
+              />
+            </SettingsFormField>
+            <SettingsFormField label={t("settings.provider.baseUrlLabel")}>
+              <ProviderDrawerTextInput
+                value={form.base_url}
+                onChange={(base_url) => onFormChange({ ...form, base_url })}
+                placeholder={t("settings.provider.baseUrlPlaceholder")}
+                icon={<Link2 size={16} />}
+              />
+            </SettingsFormField>
+            <SettingsFormField label={t("settings.provider.apiKeyLabel")}>
+              <ProviderDrawerTextInput
+                type="password"
+                value={form.api_key}
+                onChange={(api_key) => onFormChange({ ...form, api_key })}
+                placeholder={
+                  editingProfileId
+                    ? t("settings.provider.keepKeyPlaceholder")
+                    : t("settings.provider.apiKeyPlaceholder")
+                }
+                icon={<KeyRound size={16} />}
+                autoComplete="new-password"
+              />
+            </SettingsFormField>
+            <div className="grid gap-2">
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                {t("settings.provider.capabilitiesLabel")}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {PROVIDER_CAPABILITY_OPTIONS.map((option) => (
+                  <ProviderCapabilityToggle
+                    key={option.value}
+                    option={option}
+                    selected={form.capabilities.includes(option.value)}
+                    onToggle={() => toggleCapability(option.value)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+              <ProviderDrawerEnableToggle
+                checked={form.enabled}
+                disabled={pending}
+                blocked={enableToggleBlocked}
+                onToggle={(enabled) => onFormChange({ ...form, enabled })}
+              />
+            </div>
+          </div>
+
+          <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-[#121722]">
             <button
-              type="button"
-              onClick={onSubmitProfile}
-              disabled={pending || !profileForm.name.trim() || !profileForm.capabilities.length}
-              className={SETTINGS_MAIN_ACTION_CLASS}
+              type="submit"
+              disabled={pending || !form.name.trim() || !form.capabilities.length}
+              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-indigo-600 px-5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-500 disabled:opacity-50 dark:bg-violet-500 dark:shadow-violet-950/30 dark:hover:bg-violet-400"
             >
               {pending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Save size={14} className="mr-2" />}
               {t("detail.save")}
             </button>
           </div>
-        </div>
-      </div>
+        </form>
+      </aside>
     </div>
   );
 }
@@ -847,6 +1343,9 @@ export function SettingsPage() {
   const [sectionSearch, setSectionSearch] = useState("");
   const [providerProfileForm, setProviderProfileForm] = useState<ProviderProfileFormState>(EMPTY_PROVIDER_FORM);
   const [editingProviderProfileId, setEditingProviderProfileId] = useState<string | null>(null);
+  const [providerDrawerOpen, setProviderDrawerOpen] = useState(false);
+  const [pendingDeleteProviderProfile, setPendingDeleteProviderProfile] = useState<ProviderProfile | null>(null);
+  const [togglingProviderProfileId, setTogglingProviderProfileId] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState<TextBindingDraft>(textBindingDraft(undefined));
   const [imageDraft, setImageDraft] = useState<ImageBindingDraft>(imageBindingDraft(undefined));
 
@@ -959,18 +1458,12 @@ export function SettingsPage() {
   });
 
   const createProviderProfileMutation = useMutation({
-    mutationFn: () =>
-      api.createProviderProfile({
-        name: providerProfileForm.name.trim(),
-        base_url: providerProfileForm.base_url.trim() || null,
-        api_key: providerProfileForm.api_key.trim() || null,
-        capabilities: providerProfileForm.capabilities,
-        enabled: providerProfileForm.enabled,
-      }),
+    mutationFn: () => api.createProviderProfile(providerProfileCreatePayload(providerProfileForm)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["provider-config"] });
       setProviderProfileForm(EMPTY_PROVIDER_FORM);
       setEditingProviderProfileId(null);
+      setProviderDrawerOpen(false);
       setError("");
       setSavedMessage(t("settings.provider.saved"));
     },
@@ -985,18 +1478,13 @@ export function SettingsPage() {
       if (!editingProviderProfileId) {
         throw new Error(t("settings.provider.missingId"));
       }
-      return api.updateProviderProfile(editingProviderProfileId, {
-        name: providerProfileForm.name.trim(),
-        base_url: providerProfileForm.base_url.trim() || null,
-        api_key: providerProfileForm.api_key,
-        capabilities: providerProfileForm.capabilities,
-        enabled: providerProfileForm.enabled,
-      });
+      return api.updateProviderProfile(editingProviderProfileId, providerProfileUpdatePayload(providerProfileForm));
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["provider-config"] });
       setProviderProfileForm(EMPTY_PROVIDER_FORM);
       setEditingProviderProfileId(null);
+      setProviderDrawerOpen(false);
       setError("");
       setSavedMessage(t("settings.provider.saved"));
     },
@@ -1006,17 +1494,39 @@ export function SettingsPage() {
     },
   });
 
-  const archiveProviderProfileMutation = useMutation({
+  const deleteProviderProfileMutation = useMutation({
     mutationFn: (profileId: string) => api.archiveProviderProfile(profileId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["provider-config"] });
+      setPendingDeleteProviderProfile(null);
       setError("");
-      setSavedMessage(t("settings.provider.archivedMessage"));
+      setSavedMessage(t("settings.provider.deletedMessage"));
+    },
+    onError: (mutationError) => {
+      setPendingDeleteProviderProfile(null);
+      setSavedMessage("");
+      setError(mutationError instanceof ApiError ? mutationError.detail : t("settings.provider.deleteFailed"));
+    },
+  });
+
+  const updateProviderProfileEnabledMutation = useMutation({
+    mutationFn: ({ profileId, enabled }: { profileId: string; enabled: boolean }) =>
+      api.updateProviderProfile(profileId, { enabled }),
+    onMutate: ({ profileId }) => {
+      setTogglingProviderProfileId(profileId);
+      setError("");
+      setSavedMessage("");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["provider-config"] });
+      setError("");
+      setSavedMessage(t("settings.provider.saved"));
     },
     onError: (mutationError) => {
       setSavedMessage("");
-      setError(mutationError instanceof ApiError ? mutationError.detail : t("settings.provider.archiveFailed"));
+      setError(mutationError instanceof ApiError ? mutationError.detail : t("settings.provider.saveFailed"));
     },
+    onSettled: () => setTogglingProviderProfileId(null),
   });
 
   const updateTextBindingMutation = useMutation({
@@ -1095,10 +1605,13 @@ export function SettingsPage() {
     unlockMutation.mutate();
   };
 
-  const providerPending =
+  const providerProfilePending =
     createProviderProfileMutation.isPending ||
     updateProviderProfileMutation.isPending ||
-    archiveProviderProfileMutation.isPending ||
+    deleteProviderProfileMutation.isPending ||
+    updateProviderProfileEnabledMutation.isPending;
+  const providerPending =
+    providerProfilePending ||
     updateTextBindingMutation.isPending ||
     updateImageBindingMutation.isPending;
 
@@ -1313,16 +1826,30 @@ export function SettingsPage() {
                         data={providerConfigQuery.data}
                         profileForm={providerProfileForm}
                         editingProfileId={editingProviderProfileId}
-                        pending={providerPending}
+                        drawerOpen={providerDrawerOpen}
+                        pending={providerProfilePending}
+                        togglingProfileId={togglingProviderProfileId}
                         onProfileFormChange={setProviderProfileForm}
-                        onEditProfile={(profile) => {
-                          setEditingProviderProfileId(profile.id);
-                          setProviderProfileForm(providerFormFromProfile(profile));
+                        onOpenCreate={() => {
+                          const next = providerDrawerCreateState();
+                          setEditingProviderProfileId(next.editingProfileId);
+                          setProviderProfileForm(next.form);
+                          setProviderDrawerOpen(next.open);
+                          setError("");
                           setSavedMessage("");
                         }}
-                        onCancelEdit={() => {
+                        onEditProfile={(profile) => {
+                          const next = providerDrawerEditState(profile);
+                          setEditingProviderProfileId(next.editingProfileId);
+                          setProviderProfileForm(next.form);
+                          setProviderDrawerOpen(next.open);
+                          setError("");
+                          setSavedMessage("");
+                        }}
+                        onCloseDrawer={() => {
                           setEditingProviderProfileId(null);
                           setProviderProfileForm(EMPTY_PROVIDER_FORM);
+                          setProviderDrawerOpen(false);
                         }}
                         onSubmitProfile={() => {
                           setError("");
@@ -1333,10 +1860,13 @@ export function SettingsPage() {
                           }
                           createProviderProfileMutation.mutate();
                         }}
-                        onArchiveProfile={(profileId) => {
+                        onDeleteProfile={(profile) => {
                           setError("");
                           setSavedMessage("");
-                          archiveProviderProfileMutation.mutate(profileId);
+                          setPendingDeleteProviderProfile(profile);
+                        }}
+                        onToggleProfileEnabled={(profileId, enabled) => {
+                          updateProviderProfileEnabledMutation.mutate({ profileId, enabled });
                         }}
                       />
                     ) : null}
@@ -1378,23 +1908,46 @@ export function SettingsPage() {
                     {genericSection ? (
                       <form onSubmit={handleSubmit} className={`${PANEL_CLASS} space-y-2`}>
                         {activeItems.length ? (
-                          activeItems.map((item) => (
-                            <ConfigField
-                              key={item.key}
-                              item={item}
-                              value={drafts[item.key] ?? draftFromItem(item)}
-                              secretTouched={Boolean(secretTouched[item.key])}
-                              isResetting={resettingKey === item.key}
-                              onChange={(nextValue, touchedSecret) => {
-                                setDrafts((current) => ({ ...current, [item.key]: nextValue }));
-                                setSavedMessage("");
-                                if (touchedSecret) {
-                                  setSecretTouched((current) => ({ ...current, [item.key]: true }));
-                                }
-                              }}
-                              onReset={() => resetMutation.mutate(item.key)}
-                            />
-                          ))
+                          activeSection === "upload" ? (
+                            <div className="grid gap-3 lg:grid-cols-2">
+                              {activeItems.map((item) => (
+                                <ConfigField
+                                  key={item.key}
+                                  item={item}
+                                  value={drafts[item.key] ?? draftFromItem(item)}
+                                  secretTouched={Boolean(secretTouched[item.key])}
+                                  isResetting={resettingKey === item.key}
+                                  layout="card"
+                                  onChange={(nextValue, touchedSecret) => {
+                                    setDrafts((current) => ({ ...current, [item.key]: nextValue }));
+                                    setSavedMessage("");
+                                    if (touchedSecret) {
+                                      setSecretTouched((current) => ({ ...current, [item.key]: true }));
+                                    }
+                                  }}
+                                  onReset={() => resetMutation.mutate(item.key)}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            activeItems.map((item) => (
+                              <ConfigField
+                                key={item.key}
+                                item={item}
+                                value={drafts[item.key] ?? draftFromItem(item)}
+                                secretTouched={Boolean(secretTouched[item.key])}
+                                isResetting={resettingKey === item.key}
+                                onChange={(nextValue, touchedSecret) => {
+                                  setDrafts((current) => ({ ...current, [item.key]: nextValue }));
+                                  setSavedMessage("");
+                                  if (touchedSecret) {
+                                    setSecretTouched((current) => ({ ...current, [item.key]: true }));
+                                  }
+                                }}
+                                onReset={() => resetMutation.mutate(item.key)}
+                              />
+                            ))
+                          )
                         ) : (
                           <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             {t("settings.section.empty")}
@@ -1441,6 +1994,24 @@ export function SettingsPage() {
             </div>
           ) : null}
         </div>
+        <ConfirmDialog
+          open={Boolean(pendingDeleteProviderProfile)}
+          title={t("settings.provider.deleteConfirmTitle")}
+          description={
+            pendingDeleteProviderProfile
+              ? t("settings.provider.deleteConfirm", { name: pendingDeleteProviderProfile.name })
+              : ""
+          }
+          confirmLabel={t("settings.provider.deleteConfirmLabel")}
+          cancelLabel={t("common.cancel")}
+          busy={deleteProviderProfileMutation.isPending}
+          onClose={() => setPendingDeleteProviderProfile(null)}
+          onConfirm={() => {
+            if (pendingDeleteProviderProfile) {
+              deleteProviderProfileMutation.mutate(pendingDeleteProviderProfile.id);
+            }
+          }}
+        />
       </main>
     </div>
   );
