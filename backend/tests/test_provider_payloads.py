@@ -754,6 +754,15 @@ def test_image_generation_without_copy_link_uses_image_edit_prompt_mode(
                     width=800,
                     height=800,
                     variant_label=f"capturing-{poster.copy_prompt_mode}",
+                    provider_response_id="resp_workflow_1",
+                    provider_response_status="completed",
+                    provider_output_json={
+                        "_productflow": {
+                            "actual_size": "800x800",
+                            "notes": ["accepted quality", "normalized size"],
+                        },
+                        "raw": {"hidden": True},
+                    },
                 ),
                 "capturing-v1",
             )
@@ -801,6 +810,17 @@ def test_image_generation_without_copy_link_uses_image_edit_prompt_mode(
 
     assert image_output["context_summary"]["copy_prompt_mode"] == "image_edit"
     assert image_output["copy_set_id"]
+    assert image_output["provider_results"] == [
+        {
+            "target_index": 1,
+            "provider_name": "capturing",
+            "model_name": "capturing-v1",
+            "provider_response_id": "resp_workflow_1",
+            "provider_response_status": "completed",
+            "actual_size": "800x800",
+            "notes": ["accepted quality", "normalized size"],
+        }
+    ]
     assert len(captured_inputs) == 1
     assert captured_inputs[0].copy_prompt_mode == "image_edit"
     assert captured_inputs[0].instruction and "暖色露营场景" in captured_inputs[0].instruction

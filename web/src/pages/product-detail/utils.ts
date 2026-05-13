@@ -27,6 +27,11 @@ export interface WorkflowNodeRunActionState {
   title: string;
 }
 
+export interface WorkflowNodeActiveRunContext {
+  run: WorkflowRun;
+  nodeRun: WorkflowNodeRun;
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -80,6 +85,10 @@ export function workflowNodeStatusLabel(node: Pick<WorkflowNode, "node_type" | "
   return t(NODE_STATUS_LABEL_KEYS[node.status]);
 }
 
+export function workflowNodeRunStatusLabel(status: WorkflowNodeRun["status"], t: TranslateFunction = defaultT): string {
+  return t(NODE_STATUS_LABEL_KEYS[status]);
+}
+
 export function isImageWorkflowNodeWaiting(node: WorkflowNode): boolean {
   return (
     (node.node_type === "image_generation" || node.node_type === "reference_image") &&
@@ -98,6 +107,19 @@ export function imageWorkflowNodeWaitingLabel(node: WorkflowNode, t: TranslateFu
       : t("detail.nodeWaiting.referenceRunning", { label: slotLabel });
   }
   return node.status === "queued" ? t("detail.nodeWaiting.imageQueued") : t("detail.nodeWaiting.imageRunning");
+}
+
+export function workflowNodeActivityText(node: WorkflowNode, t: TranslateFunction = defaultT): string {
+  if (isImageWorkflowNodeWaiting(node)) {
+    return imageWorkflowNodeWaitingLabel(node, t);
+  }
+  if (node.status === "queued") {
+    return t("detail.nodeActivity.queued");
+  }
+  if (node.status === "running") {
+    return t("detail.nodeActivity.running");
+  }
+  return "";
 }
 
 export function getWorkflowNodeRunActionState(
@@ -162,6 +184,92 @@ export function getWorkflowNodeCancelableRun(
         ),
     ) ?? null
   );
+}
+
+export function getWorkflowNodeActiveRunContext(
+  workflow: ProductWorkflow | undefined | null,
+  node: Pick<WorkflowNode, "id"> | undefined | null,
+): WorkflowNodeActiveRunContext | null {
+  if (!workflow || !node) {
+    return null;
+  }
+  for (const run of workflow.runs) {
+    const nodeRun = run.node_runs.find(
+      (item) =>
+        item.node_id === node.id &&
+        (item.status === "queued" || item.status === "running"),
+    );
+    if (nodeRun) {
+      return { run, nodeRun };
+    }
+  }
+  return null;
+}
+
+export function workflowRunQueueText(run: WorkflowRun, t: TranslateFunction = defaultT): string {
+  if (typeof run.queue_position === "number") {
+    return t("detail.runQueuedText", {
+      position: run.queue_position,
+      ahead: run.queued_ahead_count ?? 0,
+      active: run.queue_active_count,
+      max: run.queue_max_concurrent_tasks,
+    });
+  }
+  if (run.status === "running") {
+    return t("detail.runRunningText", { running: run.queue_running_count, queued: run.queue_queued_count });
+  }
+  return "";
+}
+
+export function workflowNodeRunDurationText(
+  nodeRun: Pick<WorkflowNodeRun, "started_at" | "finished_at">,
+  t: TranslateFunction = defaultT,
+): string {
+  if (!nodeRun.finished_at) {
+    return "";
+  }
+  const started = new Date(nodeRun.started_at).getTime();
+  const finished = new Date(nodeRun.finished_at).getTime();
+  if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) {
+    return "";
+  }
+  const seconds = Math.max(1, Math.round((finished - started) / 1000));
+  if (seconds < 60) {
+    return t("detail.nodeRunDurationSeconds", { seconds });
+  }
+  return t("detail.nodeRunDurationMinutes", {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  });
+}
+
+export function workflowNodeRunProviderSummary(
+  nodeRun: Pick<WorkflowNodeRun, "output_json">,
+  t: TranslateFunction = defaultT,
+): string {
+  const providerResults = nodeRun.output_json?.provider_results;
+  if (!Array.isArray(providerResults) || !providerResults.length) {
+    return "";
+  }
+  const first = providerResults.find((item): item is Record<string, unknown> => {
+    return typeof item === "object" && item !== null;
+  });
+  if (!first) {
+    return "";
+  }
+  const providerName = typeof first.provider_name === "string" ? first.provider_name : "";
+  const modelName = typeof first.model_name === "string" ? first.model_name : "";
+  const status = typeof first.provider_response_status === "string" ? first.provider_response_status : "";
+  const responseId = typeof first.provider_response_id === "string" ? first.provider_response_id : "";
+  const label = [providerName, modelName].filter(Boolean).join(" / ");
+  if (!label && !status && !responseId) {
+    return "";
+  }
+  return t("detail.nodeRunProviderSummary", {
+    provider: label || t("detail.nodeRunProviderUnknown"),
+    status: status || t("detail.nodeRunProviderStatusUnknown"),
+    responseId: responseId || t("detail.nodeRunProviderResponseUnknown"),
+  });
 }
 
 export function hasActiveWorkflow(workflow: ProductWorkflow | undefined | null): boolean {

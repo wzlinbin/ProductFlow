@@ -24,6 +24,7 @@ import {
   imageWorkflowNodeWaitingLabel,
   isImageWorkflowNodeWaiting,
   statusClass,
+  workflowNodeActivityText,
   workflowNodeStatusLabel,
 } from "./utils";
 
@@ -84,6 +85,7 @@ export function WorkflowNodeCard({
   const displayLabel = workflowNodeDisplayLabel(node, t);
   const imageWaiting = isImageWorkflowNodeWaiting(node);
   const waitingLabel = imageWorkflowNodeWaitingLabel(node, t);
+  const activityText = workflowNodeActivityText(node, t);
   const selectedClassName = primarySelected
     ? "border-indigo-300 shadow-lg shadow-indigo-950/10 ring-2 ring-indigo-200/70 dark:border-violet-400 dark:shadow-indigo-950/30 dark:ring-violet-300/60"
     : secondarySelected || previewSelected
@@ -183,6 +185,19 @@ export function WorkflowNodeCard({
           <div className="mb-2 flex h-28 flex-col items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-700 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:text-indigo-100">
             <Loader2 size={18} className="animate-spin" />
             <div className="mt-2 text-xs font-medium">{waitingLabel}</div>
+          </div>
+        ) : null}
+        {activityText && !imageWaiting ? (
+          <div className="mb-2 flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-2 text-xs leading-5 text-indigo-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-100">
+            <Loader2 size={13} className="mt-0.5 shrink-0 animate-spin" />
+            <div className="min-w-0">
+              <div className="font-semibold">{activityText}</div>
+              {node.last_run_at ? (
+                <div className="mt-0.5 text-[10px] text-indigo-600/70 dark:text-violet-100/70">
+                  {t("detail.recent", { time: formatDateTime(node.last_run_at) })}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
         {node.failure_reason ? (

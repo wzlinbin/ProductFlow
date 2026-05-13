@@ -154,6 +154,7 @@ def execute_workflow_image_generation(
     poster_ids: list[str] = []
     filled_source_asset_ids: list[str] = []
     filled_reference_node_ids: list[str] = []
+    provider_results: list[dict[str, object]] = []
     settings = get_runtime_settings()
     kind = poster_kind_from_config(node.config_json)
     image_providers = (
@@ -208,12 +209,32 @@ def execute_workflow_image_generation(
         filled_source_asset_ids.append(asset.id)
         filled_reference_node_ids.append(target_node.id)
         fill_reference_node(target_node, asset, source_poster_variant_id=poster.id)
+        provider_result = {
+            "target_index": generated_image.target_index,
+            "provider_name": generated_image.provider_name,
+            "model_name": generated_image.model_name,
+            "provider_response_id": generated_image.provider_response_id,
+            "provider_response_status": generated_image.provider_response_status,
+        }
+        if isinstance(generated_image.provider_output_json, dict):
+            metadata = generated_image.provider_output_json.get("_productflow")
+            if isinstance(metadata, dict):
+                actual_size = metadata.get("actual_size")
+                notes = metadata.get("notes")
+                if isinstance(actual_size, str):
+                    provider_result["actual_size"] = actual_size
+                if isinstance(notes, list):
+                    provider_result["notes"] = [item for item in notes if isinstance(item, str)][:4]
+        safe_provider_result = {key: value for key, value in provider_result.items() if value is not None}
+        if safe_provider_result:
+            provider_results.append(safe_provider_result)
     product.updated_at = now_utc()
     return {
         "copy_set_id": copy_set.id,
         "generated_poster_variant_ids": poster_ids,
         "filled_source_asset_ids": filled_source_asset_ids,
         "filled_reference_node_ids": filled_reference_node_ids,
+        "provider_results": provider_results,
         "target_count": len(downstream_nodes),
         "size": image_size_from_config(node.config_json),
         "instruction": optional_config_text(node.config_json, "instruction"),
@@ -277,6 +298,11 @@ def generate_workflow_images_concurrently(
                 height=generated_image.height,
                 template_name=f"workflow:{image_provider.provider_name}:{generated_image.variant_label}:{image_model}",
                 mime_type=generated_image.mime_type,
+                provider_name=image_provider.provider_name,
+                model_name=image_model,
+                provider_response_id=generated_image.provider_response_id,
+                provider_response_status=generated_image.provider_response_status,
+                provider_output_json=generated_image.provider_output_json,
             )
 
         renderer = renderer_factory(poster_font_path)

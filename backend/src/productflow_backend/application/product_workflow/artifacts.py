@@ -36,6 +36,11 @@ class GeneratedWorkflowImage:
     height: int
     template_name: str
     mime_type: str
+    provider_name: str | None = None
+    model_name: str | None = None
+    provider_response_id: str | None = None
+    provider_response_status: str | None = None
+    provider_output_json: dict[str, Any] | None = None
 
 
 def create_context_copy_set(

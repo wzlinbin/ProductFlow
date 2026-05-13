@@ -634,6 +634,10 @@ returns the normal `ProductWorkflow`.
   asserts generated poster IDs, filled source asset IDs, size, and slot output are persisted.
 - API regression for multi-target image generation asserts multiple downstream reference slots are filled and provider
   generation calls are initiated concurrently while database writes remain in the owning session.
+- API/provider regression for generated-mode workflow image nodes asserts `output_json.provider_results` contains only
+  compact provider summary fields such as `provider_name`, `model_name`, `provider_response_id`,
+  `provider_response_status`, `actual_size`, and provider compatibility notes. Do not persist raw provider request bodies,
+  full provider output JSON, prompts, API keys, or base URLs in workflow node output.
 - API regression uploads twice to the same `reference_image` node and asserts the node exposes only the second asset while
   both old and new `source_assets` remain on the product. Another regression fills an already populated reference node from
   an upstream `image_generation` node and asserts the same single-slot replacement behavior.
@@ -996,6 +1000,9 @@ Centralize text extraction before JSON parsing so every text provider method sup
 - Workflow image provider failure with raw provider details -> mark failed with a generic safe reason such as
   `图片生成失败，请稍后重试`; never expose secrets, base URLs, prompt payloads, request bodies, file paths, or tracebacks
   through `failure_reason`.
+- Workflow image provider success may persist a compact `output_json.provider_results` summary for UI logs, but this is
+  not a live progress channel. Real-time provider progress requires durable workflow node-run progress fields; do not fake
+  ImageChat-style `provider_response_status` polling from stale terminal output.
 - Duplicate Redis message for terminal run -> no-op and do not call providers.
 - Duplicate Redis message while another worker owns a non-stale running node -> no-op and do not call providers.
 - Delete a node while its workflow has an active run, or while the node is `queued` / `running` -> `400` with

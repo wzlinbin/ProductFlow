@@ -41,7 +41,15 @@ import { DownloadLink } from "./ImageDownloadComponents";
 import { getNodeImageDownload } from "./imageDownloads";
 import { workflowNodeDisplayLabel, workflowNodeDisplayTitle } from "./nodeDisplay";
 import type { NodeConfigDraft, SaveStatus } from "./types";
-import { type WorkflowNodeRunActionState, outputText, statusClass, workflowNodeStatusLabel } from "./utils";
+import {
+  type WorkflowNodeRunActionState,
+  getWorkflowNodeActiveRunContext,
+  outputText,
+  statusClass,
+  workflowNodeActivityText,
+  workflowNodeStatusLabel,
+  workflowRunQueueText,
+} from "./utils";
 import { TextArea } from "./TextArea";
 
 type TFunction = (key: TranslationKey, params?: TranslationParams) => string;
@@ -150,6 +158,12 @@ export function InspectorPanel({
       node.output_json.source_asset_ids.length,
   );
   const referenceImage = node.node_type === "reference_image" ? getNodeImageDownload(node, product, t) : null;
+  const activeRunContext = getWorkflowNodeActiveRunContext(workflow, node);
+  const activeRunQueueText = activeRunContext ? workflowRunQueueText(activeRunContext.run, t) : "";
+  const activeRunNodeText = workflowNodeActivityText(
+    { ...node, status: activeRunContext?.nodeRun.status ?? node.status },
+    t,
+  );
 
   return (
     <div className="space-y-3">
@@ -200,6 +214,31 @@ export function InspectorPanel({
             ) : null}
           </div>
         </div>
+
+        {activeRunContext ? (
+          <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5 text-xs leading-5 text-indigo-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-100">
+            <div className="flex items-start gap-2">
+              <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin" />
+              <div className="min-w-0">
+                <div className="font-semibold">
+                  {activeRunContext.nodeRun.status === "queued"
+                    ? t("detail.inspector.activeRunQueued")
+                    : t("detail.inspector.activeRunRunning")}
+                </div>
+                {activeRunNodeText ? (
+                  <div className="mt-0.5 text-indigo-600/85 dark:text-violet-100/80">{activeRunNodeText}</div>
+                ) : null}
+                {activeRunQueueText ? (
+                  <div className="mt-1 text-indigo-600/75 dark:text-violet-100/70">{activeRunQueueText}</div>
+                ) : null}
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-indigo-600/70 dark:text-violet-100/60">
+                  <span>{t("detail.nodeRunStarted", { time: formatDateTime(activeRunContext.nodeRun.started_at) })}</span>
+                  {activeRunContext.run.is_cancelable ? <span>{t("detail.runCancelable")}</span> : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {node.node_type !== "product_context" || onCancelRun ? (
           <div

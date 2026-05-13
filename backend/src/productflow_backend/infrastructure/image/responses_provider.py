@@ -753,6 +753,9 @@ class OpenAIResponsesImageProvider(ImageProvider):
                 width=width,
                 height=height,
                 variant_label=variant_label,
+                provider_response_id=result.provider_response_id,
+                provider_response_status=str(result.provider_output_json.get("status", "") or "") or None,
+                provider_output_json=result.provider_output_json,
             ),
             self.model,
         )

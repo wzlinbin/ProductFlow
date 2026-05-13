@@ -4,6 +4,7 @@ import type { TranslationKey } from "../../lib/i18n";
 import type { ProductWorkflow, WorkflowNode, WorkflowRun, WorkflowRunStatusSummary } from "../../lib/types";
 import {
   getWorkflowNodeCancelableRun,
+  getWorkflowNodeActiveRunContext,
   getWorkflowNodeRunActionState,
   hasActiveWorkflow,
   imageWorkflowNodeWaitingLabel,
@@ -11,7 +12,12 @@ import {
   mergeProductWorkflowStatusIntoDetail,
   outputStringArray,
   shouldRefreshProductWorkflowDetailFromStatus,
+  workflowNodeActivityText,
+  workflowNodeRunDurationText,
+  workflowNodeRunProviderSummary,
+  workflowNodeRunStatusLabel,
   workflowNodeStatusLabel,
+  workflowRunQueueText,
 } from "./utils";
 
 const baseNode: WorkflowNode = {
@@ -137,6 +143,19 @@ describe("product-detail utils", () => {
     }))).toBe("Image queued");
     expect(isImageWorkflowNodeWaiting({ ...baseNode, node_type: "copy_generation", status: "running" })).toBe(false);
     expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "reference_image", status: "succeeded" })).toBe("");
+  });
+
+  it("formats active node and node-run status labels through shared helpers", () => {
+    expect(workflowNodeActivityText({ ...baseNode, node_type: "copy_generation", status: "queued" })).toBe("节点已加入运行队列");
+    expect(workflowNodeActivityText({ ...baseNode, node_type: "copy_generation", status: "running" })).toBe("节点正在运行");
+    expect(workflowNodeActivityText({ ...baseNode, node_type: "copy_generation", status: "idle" })).toBe("");
+    expect(workflowNodeRunStatusLabel("failed")).toBe("失败");
+    expect(
+      workflowNodeActivityText(
+        { ...baseNode, node_type: "copy_generation", status: "running" },
+        stubT({ "detail.nodeActivity.running": "Node running" }),
+      ),
+    ).toBe("Node running");
   });
 
   it("keeps node run action state scoped to the node instead of globally disabling every run button", () => {
@@ -280,6 +299,104 @@ describe("product-detail utils", () => {
     expect(getWorkflowNodeCancelableRun(workflow, { id: "node-idle" })).toBeNull();
     expect(getWorkflowNodeCancelableRun(null, { id: "node-active" })).toBeNull();
     expect(getWorkflowNodeCancelableRun(workflow, null)).toBeNull();
+  });
+
+  it("finds active run context for the selected node", () => {
+    const queuedRun = workflowRun({
+      id: "run-queued",
+      status: "running",
+      node_runs: [
+        {
+          id: "node-run-queued",
+          workflow_run_id: "run-queued",
+          node_id: "node-active",
+          status: "queued",
+          output_json: null,
+          failure_reason: null,
+          copy_set_id: null,
+          poster_variant_id: null,
+          image_session_asset_id: null,
+          started_at: "2026-04-26T00:01:00Z",
+          finished_at: null,
+        },
+      ],
+    });
+    const finishedRun = workflowRun({
+      id: "run-finished",
+      status: "succeeded",
+      is_cancelable: false,
+      node_runs: [
+        {
+          id: "node-run-finished",
+          workflow_run_id: "run-finished",
+          node_id: "node-active",
+          status: "succeeded",
+          output_json: null,
+          failure_reason: null,
+          copy_set_id: null,
+          poster_variant_id: null,
+          image_session_asset_id: null,
+          started_at: "2026-04-26T00:00:00Z",
+          finished_at: "2026-04-26T00:02:00Z",
+        },
+      ],
+    });
+    const workflow = workflowWith({ runs: [finishedRun, queuedRun] });
+
+    expect(getWorkflowNodeActiveRunContext(workflow, { id: "node-active" })).toMatchObject({
+      run: { id: "run-queued" },
+      nodeRun: { id: "node-run-queued" },
+    });
+    expect(getWorkflowNodeActiveRunContext(workflow, { id: "node-idle" })).toBeNull();
+    expect(getWorkflowNodeActiveRunContext(null, { id: "node-active" })).toBeNull();
+  });
+
+  it("formats workflow run queue and running text", () => {
+    expect(
+      workflowRunQueueText(
+        workflowRun({
+          queue_position: 2,
+          queued_ahead_count: 1,
+          queue_active_count: 3,
+          queue_max_concurrent_tasks: 4,
+        }),
+      ),
+    ).toBe("排队第 2 位，前方 1 个；全局活跃 3/4。");
+    expect(workflowRunQueueText(workflowRun({ queue_position: null, status: "running", queue_running_count: 2, queue_queued_count: 5 }))).toBe(
+      "全局运行 2 个，排队 5 个。",
+    );
+    expect(workflowRunQueueText(workflowRun({ queue_position: null, status: "succeeded" }))).toBe("");
+  });
+
+  it("formats node-run duration and provider summary without exposing raw output", () => {
+    expect(
+      workflowNodeRunDurationText({
+        started_at: "2026-04-26T00:00:00Z",
+        finished_at: "2026-04-26T00:00:08Z",
+      }),
+    ).toBe("耗时 8 秒");
+    expect(
+      workflowNodeRunDurationText({
+        started_at: "2026-04-26T00:00:00Z",
+        finished_at: "2026-04-26T00:02:05Z",
+      }),
+    ).toBe("耗时 2 分 5 秒");
+    expect(
+      workflowNodeRunProviderSummary({
+        output_json: {
+          provider_results: [
+            {
+              provider_name: "openai-responses",
+              model_name: "gpt-image-1",
+              provider_response_status: "completed",
+              provider_response_id: "resp_1",
+              provider_output_json: { raw: "hidden" },
+            },
+          ],
+        },
+      }),
+    ).toBe("供应商 openai-responses / gpt-image-1，状态 completed，响应 resp_1");
+    expect(workflowNodeRunProviderSummary({ output_json: { provider_results: [] } })).toBe("");
   });
 
   it("labels idle product context nodes as usable static context", () => {

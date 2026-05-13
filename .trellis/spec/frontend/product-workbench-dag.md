@@ -90,6 +90,16 @@
   `queued` / `running`. Run history must use backend `is_retryable` for retry actions. Cancellation belongs in the
   selected node detail actions when the selected node is part of a cancelable active run; cancel buttons call the workflow
   cancel API and must not be local-only state.
+- ProductDetail run history should display both workflow-run and node-run status details. Each run card should surface
+  queue/running text, `is_cancelable`, `is_retryable`, `failure_reason`, and a node-run list with node title, node type,
+  node-run status, started/finished timestamps, and node-run failure reason. Image-generation prompt review may be exposed
+  as an explicit button on the corresponding node-run row; do not render raw `output_json`, artifact ids, or prompt text
+  inline in the normal log.
+- ProductDetail run history may display workflow image-provider summaries from `nodeRun.output_json.provider_results`
+  when present. Keep this as a compact summary only: provider/model, provider response status/id, actual size, and
+  provider compatibility notes are acceptable; raw provider request/output JSON, prompts, API keys, base URLs, and artifact
+  ids must stay hidden. Do not imply live provider progress unless the workflow API exposes durable node-run progress
+  fields.
 - Running any workflow node must first flush the currently selected dirty inspector draft, even when the clicked run action
   belongs to a different node. Otherwise a user can edit the product context node and immediately run an image node from
   the canvas before autosave persists the newest product fields.

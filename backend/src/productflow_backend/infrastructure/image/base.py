@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from base64 import b64decode, b64encode
 from io import BytesIO
+from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
@@ -18,6 +19,9 @@ class GeneratedImagePayload(BaseModel):
     width: int
     height: int
     variant_label: str
+    provider_response_id: str | None = None
+    provider_response_status: str | None = None
+    provider_output_json: dict[str, Any] | None = None
 
 
 class ImageProvider(ABC):
