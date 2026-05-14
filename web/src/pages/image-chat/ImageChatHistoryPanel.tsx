@@ -35,8 +35,9 @@ interface ImageChatHistoryPanelProps {
   selectedTaskPlaceholderId: string | null;
   branchBaseAssetId: string | null;
   branchBaseSelected: boolean;
-  style: CSSProperties;
-  onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  variant?: "desktop" | "mobileDrawer";
+  style?: CSSProperties;
+  onResizeStart?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onSelectRound: (assetId: string) => void;
   onSelectPlaceholder: (placeholderId: string) => void;
   onPreviewPrompt: (preview: PromptPreview) => void;
@@ -49,6 +50,7 @@ export function ImageChatHistoryPanel({
   selectedTaskPlaceholderId,
   branchBaseAssetId,
   branchBaseSelected,
+  variant = "desktop",
   style,
   onResizeStart,
   onSelectRound,
@@ -56,20 +58,53 @@ export function ImageChatHistoryPanel({
   onPreviewPrompt,
   t,
 }: ImageChatHistoryPanelProps) {
+  if (variant === "mobileDrawer") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0f1726]">
+        {historyBranches.length ? (
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-3">
+            {historyBranches.map((branch) => (
+              <HistoryBranchStrip
+                key={branch.id}
+                branch={branch}
+                selectedGeneratedAssetId={selectedGeneratedAssetId}
+                selectedTaskPlaceholderId={selectedTaskPlaceholderId}
+                branchBaseAssetId={branchBaseAssetId}
+                variant="mobileDrawer"
+                onSelectRound={onSelectRound}
+                onSelectPlaceholder={onSelectPlaceholder}
+                onPreviewPrompt={onPreviewPrompt}
+                t={t}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 items-center justify-center px-2 py-6">
+            <div className="flex min-h-24 w-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-2 text-center text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-500">
+              {t("chat.resultsAppearHere")}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
-      className="relative flex h-[9.5rem] shrink-0 flex-col border-t border-slate-200 bg-white/95 px-2.5 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.04)] dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[0_-18px_40px_rgba(0,0,0,0.24)] lg:h-[var(--image-chat-history-panel-height)] lg:px-3 lg:py-2.5"
+      className="relative hidden shrink-0 flex-col border-t border-slate-200 bg-white/95 px-2.5 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.04)] dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[0_-18px_40px_rgba(0,0,0,0.24)] lg:flex lg:h-[var(--image-chat-history-panel-height)] lg:px-3 lg:py-2.5"
       style={style}
     >
-      <button
-        type="button"
-        aria-label={t("chat.resizeHistory")}
-        title={t("chat.resizeHistoryTitle")}
-        onPointerDown={onResizeStart}
-        className="absolute inset-x-0 -top-1 z-20 hidden h-3 cursor-row-resize items-center justify-center transition-colors hover:bg-indigo-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-violet-500/15 lg:flex"
-      >
-        <span className="h-1 w-12 rounded-full bg-slate-300 dark:bg-slate-600" />
-      </button>
+      {onResizeStart ? (
+        <button
+          type="button"
+          aria-label={t("chat.resizeHistory")}
+          title={t("chat.resizeHistoryTitle")}
+          onPointerDown={onResizeStart}
+          className="absolute inset-x-0 -top-1 z-20 hidden h-3 cursor-row-resize items-center justify-center transition-colors hover:bg-indigo-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-violet-500/15 lg:flex"
+        >
+          <span className="h-1 w-12 rounded-full bg-slate-300 dark:bg-slate-600" />
+        </button>
+      ) : null}
       <div className="mb-1 flex items-center justify-between gap-3 lg:mb-2">
         <div>
           <div className="text-sm font-semibold text-slate-950 dark:text-white">{t("chat.history")}</div>

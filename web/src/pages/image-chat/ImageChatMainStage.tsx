@@ -1,4 +1,4 @@
-import { Download, GalleryHorizontalEnd, Layers3, Loader2, Sparkles } from "lucide-react";
+import { Layers3, Sparkles } from "lucide-react";
 
 import { api } from "../../lib/api";
 import { formatDateTime } from "../../lib/format";
@@ -12,11 +12,9 @@ interface ImageChatMainStageProps {
   selectedRound: ImageSessionRound | null;
   selectedPlaceholder: ImageHistoryPlaceholderCandidate | null;
   branchBaseRound: ImageSessionRound | null;
-  saveGalleryPending: boolean;
   retryingTaskId: string | null;
   cancellingTaskId: string | null;
   onPreviewRound: (round: ImageSessionRound) => void;
-  onSaveSelectedToGallery: () => void;
   onRetryGenerationTask: (task: ImageSessionGenerationTask) => void;
   onCancelGenerationTask: (task: ImageSessionGenerationTask) => void;
   t: ImageChatTranslate;
@@ -26,11 +24,9 @@ export function ImageChatMainStage({
   selectedRound,
   selectedPlaceholder,
   branchBaseRound,
-  saveGalleryPending,
   retryingTaskId,
   cancellingTaskId,
   onPreviewRound,
-  onSaveSelectedToGallery,
   onRetryGenerationTask,
   onCancelGenerationTask,
   t,
@@ -38,7 +34,7 @@ export function ImageChatMainStage({
   return (
     <div className="relative flex min-h-[18rem] flex-1 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-600/80 dark:bg-[#121b2d] dark:shadow-[0_0_0_1px_rgba(139,92,246,0.10),0_24px_80px_rgba(0,0,0,0.35)] sm:min-h-[22rem] lg:min-h-[360px]">
       <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:20px_20px] dark:bg-[radial-gradient(rgba(148,163,184,0.26)_1px,transparent_1px)]" />
-      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 px-5 py-4">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 px-5 py-4">
         {selectedRound ? (
           <div className="hidden min-w-0 max-w-[calc(100%-5.5rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:bg-slate-950/82 dark:text-slate-200 dark:ring-slate-700 lg:block">
             {formatDateTime(selectedRound.created_at)} · {selectedRound.model_name}
@@ -53,30 +49,6 @@ export function ImageChatMainStage({
           </div>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {selectedRound ? (
-            <>
-              <a
-                href={api.toApiUrl(selectedRound.generated_asset.download_url)}
-                target="_blank"
-                rel="noreferrer"
-                title={t("chat.downloadCurrent")}
-                aria-label={t("chat.downloadCurrent")}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm backdrop-blur transition-colors active:scale-[0.98] hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/82 dark:text-slate-200 dark:hover:border-violet-400/60 dark:hover:text-violet-100 lg:hidden"
-              >
-                <Download size={16} />
-              </a>
-              <button
-                type="button"
-                onClick={onSaveSelectedToGallery}
-                disabled={saveGalleryPending}
-                title={t("chat.saveSelectedGallery")}
-                aria-label={t("chat.saveSelectedGallery")}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 ring-1 ring-indigo-500 transition-colors active:scale-[0.98] hover:bg-indigo-700 disabled:opacity-60 dark:bg-gradient-to-r dark:from-indigo-500 dark:to-violet-500 dark:shadow-violet-900/35 dark:ring-violet-300/35 lg:hidden"
-              >
-                {saveGalleryPending ? <Loader2 size={16} className="animate-spin" /> : <GalleryHorizontalEnd size={16} />}
-              </button>
-            </>
-          ) : null}
           {branchBaseRound ? (
             <div className="hidden h-8 items-center gap-1.5 rounded-full bg-indigo-600 px-3 text-xs font-semibold text-white shadow-sm shadow-indigo-500/20 dark:bg-violet-500/20 dark:text-violet-100 dark:ring-1 dark:ring-violet-400/40 sm:inline-flex">
               <Layers3 size={13} />

@@ -13,6 +13,7 @@ interface HistoryBranchStripProps {
   selectedGeneratedAssetId: string | null;
   selectedTaskPlaceholderId: string | null;
   branchBaseAssetId: string | null;
+  variant?: "desktop" | "mobileDrawer";
   onSelectRound: (assetId: string) => void;
   onSelectPlaceholder: (placeholderId: string) => void;
   onPreviewPrompt: (preview: PromptPreview) => void;
@@ -24,6 +25,7 @@ export function HistoryBranchStrip({
   selectedGeneratedAssetId,
   selectedTaskPlaceholderId,
   branchBaseAssetId,
+  variant = "desktop",
   onSelectRound,
   onSelectPlaceholder,
   onPreviewPrompt,
@@ -31,6 +33,37 @@ export function HistoryBranchStrip({
 }: HistoryBranchStripProps) {
   const depthOffset = Math.min(branch.depth, 4) * 18;
   const branchLabel = branch.base_asset_id ? t("chat.branch", { depth: branch.depth }) : t("chat.firstRound");
+  const promptPreview = {
+    title: branch.base_asset_id ? t("chat.branchPrompt") : t("chat.firstPrompt"),
+    text: branch.prompt,
+    meta: `${t("chat.imageCount", { count: branch.candidates.length })} · ${formatDateTime(branch.created_at)}`,
+  };
+
+  if (variant === "mobileDrawer") {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div className="inline-flex min-h-7 max-w-[5.75rem] items-center gap-1 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 shadow-sm dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100">
+          {branch.depth > 0 ? <Layers3 size={12} /> : <History size={12} />}
+          <span className="truncate">{branchLabel}</span>
+        </div>
+        <div className="flex flex-col gap-2">
+          {branch.candidates.map((candidate) => (
+            <HistoryCandidateCard
+              key={candidate.id}
+              candidate={candidate}
+              selectedGeneratedAssetId={selectedGeneratedAssetId}
+              selectedTaskPlaceholderId={selectedTaskPlaceholderId}
+              branchBaseAssetId={branchBaseAssetId}
+              variant="mobileDrawer"
+              onSelectRound={onSelectRound}
+              onSelectPlaceholder={onSelectPlaceholder}
+              t={t}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -59,13 +92,7 @@ export function HistoryBranchStrip({
         </div>
         <button
           type="button"
-          onClick={() =>
-            onPreviewPrompt({
-              title: branch.base_asset_id ? t("chat.branchPrompt") : t("chat.firstPrompt"),
-              text: branch.prompt,
-              meta: `${t("chat.imageCount", { count: branch.candidates.length })} · ${formatDateTime(branch.created_at)}`,
-            })
-          }
+          onClick={() => onPreviewPrompt(promptPreview)}
           className="hidden rounded-md text-left text-[11px] leading-4 text-slate-400 transition-colors hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-500 dark:hover:text-violet-200 lg:line-clamp-3"
         >
           {branch.prompt}
@@ -79,6 +106,7 @@ export function HistoryBranchStrip({
             selectedGeneratedAssetId={selectedGeneratedAssetId}
             selectedTaskPlaceholderId={selectedTaskPlaceholderId}
             branchBaseAssetId={branchBaseAssetId}
+            variant={variant}
             onSelectRound={onSelectRound}
             onSelectPlaceholder={onSelectPlaceholder}
             t={t}
@@ -94,6 +122,7 @@ interface HistoryCandidateCardProps {
   selectedGeneratedAssetId: string | null;
   selectedTaskPlaceholderId: string | null;
   branchBaseAssetId: string | null;
+  variant?: "desktop" | "mobileDrawer";
   onSelectRound: (assetId: string) => void;
   onSelectPlaceholder: (placeholderId: string) => void;
   t: ImageChatTranslate;
@@ -104,21 +133,27 @@ function HistoryCandidateCard({
   selectedGeneratedAssetId,
   selectedTaskPlaceholderId,
   branchBaseAssetId,
+  variant = "desktop",
   onSelectRound,
   onSelectPlaceholder,
   t,
 }: HistoryCandidateCardProps) {
+  const cardClassName = (active: boolean, asBase = false) =>
+    `group/card relative shrink-0 overflow-hidden rounded-xl border bg-white transition-all dark:bg-[#0b1220] ${
+      variant === "mobileDrawer"
+        ? "aspect-square min-h-[5.75rem] w-full"
+        : "h-[5.5rem] w-[5.5rem] lg:aspect-square lg:h-full lg:w-auto lg:min-w-[7rem] lg:rounded-2xl"
+    } ${
+      active
+        ? "border-indigo-400 ring-2 ring-indigo-200 dark:border-violet-400 dark:ring-violet-400/45"
+        : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-violet-400/45"
+    } ${asBase ? "shadow-md shadow-indigo-200/70 dark:shadow-violet-950/40" : ""}`;
+
   if (candidate.kind === "placeholder") {
     const active = candidate.id === selectedTaskPlaceholderId;
     const running = candidate.status === "queued" || candidate.status === "running";
     return (
-      <div
-        className={`group/card relative h-[5.5rem] w-[5.5rem] shrink-0 overflow-hidden rounded-xl border bg-white transition-all dark:bg-[#0b1220] lg:aspect-square lg:h-full lg:w-auto lg:min-w-[7rem] lg:rounded-2xl ${
-          active
-            ? "border-indigo-400 ring-2 ring-indigo-200 dark:border-violet-400 dark:ring-violet-400/45"
-            : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-violet-400/45"
-        }`}
-      >
+      <div className={cardClassName(active)}>
         <button
           type="button"
           onClick={() => onSelectPlaceholder(candidate.id)}
@@ -147,27 +182,21 @@ function HistoryCandidateCard({
   const round = candidate.round;
   const active = round.generated_asset.id === selectedGeneratedAssetId;
   const asBase = round.generated_asset.id === branchBaseAssetId;
+  const candidateLabel =
+    round.candidate_count > 1 ? `${round.candidate_index}/${round.candidate_count}` : imageRoundSizeLabel(round, t);
   return (
-    <div
-      className={`group/card relative h-[5.5rem] w-[5.5rem] shrink-0 overflow-hidden rounded-xl border bg-white transition-all dark:bg-[#0b1220] lg:aspect-square lg:h-full lg:w-auto lg:min-w-[7rem] lg:rounded-2xl ${
-        active
-          ? "border-indigo-400 ring-2 ring-indigo-200 dark:border-violet-400 dark:ring-violet-400/45"
-          : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-violet-400/45"
-      } ${asBase ? "shadow-md shadow-indigo-200/70 dark:shadow-violet-950/40" : "shadow-sm shadow-slate-200/60 dark:shadow-slate-950/30"}`}
-    >
+    <div className={`${cardClassName(active, asBase)} ${asBase ? "" : "shadow-sm shadow-slate-200/60 dark:shadow-slate-950/30"}`}>
       <button type="button" onClick={() => onSelectRound(round.generated_asset.id)} className="block h-full w-full text-left">
         <img
           src={api.toApiUrl(round.generated_asset.thumbnail_url)}
-          alt={round.prompt}
+          alt={variant === "mobileDrawer" ? candidateLabel : round.prompt}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-cover"
         />
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 via-slate-950/24 to-transparent px-1.5 pb-1 pt-5 text-white lg:p-1.5 lg:pt-8">
           <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
-            <span className="min-w-0 truncate">
-              {round.candidate_count > 1 ? `${round.candidate_index}/${round.candidate_count}` : imageRoundSizeLabel(round, t)}
-            </span>
+            <span className="min-w-0 truncate">{candidateLabel}</span>
             {active ? <Check size={13} className="shrink-0" /> : null}
           </div>
         </div>

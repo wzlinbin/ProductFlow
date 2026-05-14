@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Download,
   GalleryHorizontalEnd,
+  History,
   Layers3,
   Loader2,
   Menu,
@@ -106,6 +107,7 @@ export function ImageChatPage() {
   const pendingGeneratedRoundCountRef = useRef<number | null>(null);
   const duplicateSubmitGuardRef = useRef<ImageGenerationSubmitGuard | null>(null);
   const mobileSessionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileHistoryButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSettingsButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -131,6 +133,7 @@ export function ImageChatPage() {
   const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_PANEL_DEFAULT_WIDTH);
   const [historyPanelHeight, setHistoryPanelHeight] = useState(HISTORY_PANEL_DEFAULT_HEIGHT);
   const [mobileSessionDrawerOpen, setMobileSessionDrawerOpen] = useState(false);
+  const [mobileHistoryDrawerOpen, setMobileHistoryDrawerOpen] = useState(false);
   const [mobileGenerationSheetOpen, setMobileGenerationSheetOpen] = useState(false);
 
   const leftPanelStyle = {
@@ -708,6 +711,19 @@ export function ImageChatPage() {
     saveGalleryMutation.mutate(selectedRound.generated_asset.id);
   }
 
+  function handleSelectHistoryRound(assetId: string) {
+    setSelectedGeneratedAssetId(assetId);
+    setBranchBaseAssetId(assetId);
+    setSelectedTaskPlaceholderId(null);
+    setSuccessMessage("");
+    setErrorMessage("");
+  }
+
+  function handleSelectHistoryPlaceholder(placeholderId: string) {
+    setSelectedTaskPlaceholderId(placeholderId);
+    setSelectedGeneratedAssetId(null);
+  }
+
   function handleDeleteSession(sessionId: string) {
     if (deleteSessionMutation.isPending) {
       return;
@@ -804,7 +820,13 @@ export function ImageChatPage() {
   }
 
   function handleMobileEdgeSwipeStart(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.pointerType === "mouse" || event.clientX > 24 || mobileSessionDrawerOpen || mobileGenerationSheetOpen) {
+    if (
+      event.pointerType === "mouse" ||
+      event.clientX > 24 ||
+      mobileSessionDrawerOpen ||
+      mobileHistoryDrawerOpen ||
+      mobileGenerationSheetOpen
+    ) {
       return;
     }
     const startX = event.clientX;
@@ -955,7 +977,7 @@ export function ImageChatPage() {
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-slate-100 dark:bg-[#0b1220] lg:overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col p-3 pb-2">
-            <div className="mb-3 flex items-center justify-between gap-2 lg:hidden">
+            <div className="mb-3 flex items-center justify-between gap-1.5 lg:hidden">
               <button
                 ref={mobileSessionButtonRef}
                 type="button"
@@ -965,7 +987,7 @@ export function ImageChatPage() {
               >
                 <Menu size={18} />
               </button>
-              <div className="min-w-0 flex-1 text-center">
+              <div className="min-w-0 flex-1 px-1 text-left">
                 {renameEnabled ? (
                   <input
                     value={titleDraft}
@@ -992,27 +1014,38 @@ export function ImageChatPage() {
                   </>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (renameEnabled) {
-                    handleRename();
-                    return;
-                  }
-                  setRenameEnabled(true);
-                }}
-                disabled={!selectedSessionId || renameSessionMutation.isPending}
-                aria-label={renameEnabled ? t("chat.saveSessionName") : t("chat.rename")}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
-              >
-                {renameSessionMutation.isPending ? (
-                  <Loader2 size={17} className="animate-spin" />
-                ) : renameEnabled ? (
-                  <Save size={17} />
-                ) : (
-                  <Pencil size={16} />
-                )}
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (renameEnabled) {
+                      handleRename();
+                      return;
+                    }
+                    setRenameEnabled(true);
+                  }}
+                  disabled={!selectedSessionId || renameSessionMutation.isPending}
+                  aria-label={renameEnabled ? t("chat.saveSessionName") : t("chat.rename")}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
+                >
+                  {renameSessionMutation.isPending ? (
+                    <Loader2 size={17} className="animate-spin" />
+                  ) : renameEnabled ? (
+                    <Save size={17} />
+                  ) : (
+                    <Pencil size={16} />
+                  )}
+                </button>
+                <button
+                  ref={mobileHistoryButtonRef}
+                  type="button"
+                  onClick={() => setMobileHistoryDrawerOpen(true)}
+                  aria-label={t("chat.openHistoryDrawer")}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
+                >
+                  <History size={17} />
+                </button>
+              </div>
             </div>
             <div className="mb-3 hidden flex-col gap-3 lg:flex lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
@@ -1083,15 +1116,43 @@ export function ImageChatPage() {
               selectedRound={selectedRound}
               selectedPlaceholder={selectedPlaceholder}
               branchBaseRound={branchBaseRound}
-              saveGalleryPending={saveGalleryMutation.isPending}
               retryingTaskId={retryGenerationTaskMutation.isPending ? (retryGenerationTaskMutation.variables?.taskId ?? null) : null}
               cancellingTaskId={cancelGenerationTaskMutation.isPending ? (cancelGenerationTaskMutation.variables?.taskId ?? null) : null}
               onPreviewRound={setPreviewRound}
-              onSaveSelectedToGallery={handleSaveSelectedToGallery}
               onRetryGenerationTask={handleRetryGenerationTask}
               onCancelGenerationTask={handleCancelGenerationTask}
               t={t}
             />
+            {selectedRound ? (
+              <div className="mt-2 grid grid-cols-2 gap-2 lg:hidden">
+                <a
+                  href={api.toApiUrl(selectedRound.generated_asset.download_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={t("chat.downloadCurrent")}
+                  aria-label={t("chat.downloadCurrent")}
+                  className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-center text-xs font-semibold leading-4 text-slate-700 shadow-sm transition-colors active:scale-[0.98] hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-200 dark:hover:border-violet-400/60 dark:hover:text-violet-100 sm:text-sm"
+                >
+                  <Download size={16} className="shrink-0" />
+                  <span>{t("chat.downloadCurrent")}</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={handleSaveSelectedToGallery}
+                  disabled={saveGalleryMutation.isPending}
+                  title={t("chat.saveSelectedGallery")}
+                  aria-label={t("chat.saveSelectedGallery")}
+                  className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-3 py-2 text-center text-xs font-semibold leading-4 text-white shadow-sm shadow-indigo-500/20 ring-1 ring-indigo-500 transition-colors active:scale-[0.98] hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60 dark:bg-gradient-to-r dark:from-indigo-500 dark:to-violet-500 dark:shadow-violet-900/35 dark:ring-violet-300/35 dark:focus-visible:ring-violet-300 sm:text-sm"
+                >
+                  {saveGalleryMutation.isPending ? (
+                    <Loader2 size={16} className="shrink-0 animate-spin" />
+                  ) : (
+                    <GalleryHorizontalEnd size={16} className="shrink-0" />
+                  )}
+                  <span>{t("chat.sendGallery")}</span>
+                </button>
+              </div>
+            ) : null}
             {selectedRound?.provider_notes.length ? (
               <div className="mt-2 flex flex-wrap gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-200">
                 {selectedRound.provider_notes.map((note) => (
@@ -1119,17 +1180,8 @@ export function ImageChatPage() {
             branchBaseSelected={Boolean(branchBaseRound)}
             style={historyPanelStyle}
             onResizeStart={(event) => handlePanelResizeStart("history", event)}
-            onSelectRound={(assetId) => {
-              setSelectedGeneratedAssetId(assetId);
-              setBranchBaseAssetId(assetId);
-              setSelectedTaskPlaceholderId(null);
-              setSuccessMessage("");
-              setErrorMessage("");
-            }}
-            onSelectPlaceholder={(placeholderId) => {
-              setSelectedTaskPlaceholderId(placeholderId);
-              setSelectedGeneratedAssetId(null);
-            }}
+            onSelectRound={handleSelectHistoryRound}
+            onSelectPlaceholder={handleSelectHistoryPlaceholder}
             onPreviewPrompt={setPromptPreview}
             t={t}
           />
@@ -1350,6 +1402,52 @@ export function ImageChatPage() {
               variant="mobile"
               onSelectSession={handleSelectSession}
               onDeleteSession={handleDeleteSession}
+              t={t}
+            />
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+
+      <Drawer.Root
+        direction="right"
+        open={mobileHistoryDrawerOpen}
+        onOpenChange={(open) => {
+          setMobileHistoryDrawerOpen(open);
+          if (!open) {
+            mobileHistoryButtonRef.current?.focus();
+          }
+        }}
+      >
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-slate-950/45 backdrop-blur-[2px] lg:hidden" />
+          <Drawer.Content className="fixed inset-y-0 right-0 z-[71] flex w-[7.75rem] flex-col border-l border-slate-200 bg-white shadow-2xl outline-none dark:border-slate-700 dark:bg-[#0f1726] lg:hidden">
+            <Drawer.Title className="sr-only">{t("chat.mobileHistoryDrawer")}</Drawer.Title>
+            <div className="flex items-center justify-between gap-1 border-b border-slate-200 px-2 py-3 dark:border-slate-800">
+              <div className="min-w-0 px-1">
+                <div className="text-sm font-semibold text-slate-950 dark:text-white">{t("chat.history")}</div>
+              </div>
+              <button
+                type="button"
+                aria-label={t("chat.closeHistoryDrawer")}
+                onClick={() => {
+                  setMobileHistoryDrawerOpen(false);
+                  mobileHistoryButtonRef.current?.focus();
+                }}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition-colors active:scale-[0.98] hover:border-slate-300 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <ImageChatHistoryPanel
+              historyBranches={historyBranches}
+              selectedGeneratedAssetId={selectedGeneratedAssetId}
+              selectedTaskPlaceholderId={selectedTaskPlaceholderId}
+              branchBaseAssetId={branchBaseAssetId}
+              branchBaseSelected={Boolean(branchBaseRound)}
+              variant="mobileDrawer"
+              onSelectRound={handleSelectHistoryRound}
+              onSelectPlaceholder={handleSelectHistoryPlaceholder}
+              onPreviewPrompt={setPromptPreview}
               t={t}
             />
           </Drawer.Content>
