@@ -6,6 +6,9 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "./lib/api";
 import { PreferencesProvider, useI18n } from "./lib/preferences";
 
+const AccountPage = lazy(() =>
+  import("./pages/AccountPage").then((module) => ({ default: module.AccountPage })),
+);
 const GalleryPage = lazy(() =>
   import("./pages/GalleryPage").then((module) => ({ default: module.GalleryPage })),
 );
@@ -54,6 +57,7 @@ function AppRoutes() {
   }
 
   const authenticated = Boolean(sessionQuery.data?.authenticated);
+  const isAdmin = Boolean(sessionQuery.data?.is_admin);
 
   return (
     <Suspense fallback={<LoadingScreen />}>
@@ -80,8 +84,12 @@ function AppRoutes() {
           element={authenticated ? <HelpPage /> : <Navigate to="/login" replace />}
         />
         <Route
+          path="/account"
+          element={authenticated ? <AccountPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
           path="/settings"
-          element={authenticated ? <SettingsPage /> : <Navigate to="/login" replace />}
+          element={authenticated && isAdmin ? <SettingsPage /> : <Navigate to={authenticated ? "/products" : "/login"} replace />}
         />
         <Route
           path="/products/:productId/image-chat"

@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   GalleryHorizontalEnd,
@@ -9,11 +10,13 @@ import {
   Moon,
   Settings,
   Sun,
+  UserRound,
   Wand2,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 import { LOCALES } from "../lib/i18n";
+import { api } from "../lib/api";
 import { usePreferences } from "../lib/preferences";
 import { THEME_PREFERENCES, type ThemePreference } from "../lib/theme";
 
@@ -49,10 +52,17 @@ const navItems = [
     match: (pathname: string) => pathname.startsWith("/help"),
   },
   {
+    labelKey: "nav.account",
+    to: "/account",
+    icon: UserRound,
+    match: (pathname: string) => pathname.startsWith("/account"),
+  },
+  {
     labelKey: "nav.settings",
     to: "/settings",
     icon: Settings,
     match: (pathname: string) => pathname.startsWith("/settings"),
+    adminOnly: true,
   },
 ] as const;
 
@@ -74,6 +84,9 @@ function navItemClassName(active: boolean) {
 export function TopNav({ breadcrumbs, onHome, onLogout }: TopNavProps) {
   const location = useLocation();
   const { locale, setLocale, t, themePreference, setThemePreference } = usePreferences();
+  const sessionQuery = useQuery({ queryKey: ["session"], queryFn: api.getSessionState, retry: false });
+  const isAdmin = Boolean(sessionQuery.data?.is_admin);
+  const visibleNavItems = navItems.filter((item) => !("adminOnly" in item && item.adminOnly && !isAdmin));
   const CurrentThemeIcon = themeIcons[themePreference];
   const nextThemePreference =
     THEME_PREFERENCES[(THEME_PREFERENCES.indexOf(themePreference) + 1) % THEME_PREFERENCES.length];
@@ -123,7 +136,7 @@ export function TopNav({ breadcrumbs, onHome, onLogout }: TopNavProps) {
 
         <div className="hidden min-w-0 justify-start overflow-x-auto lg:flex lg:justify-center">
           <div className="flex min-w-max items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-1 shadow-inner shadow-slate-200/40 dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const active = item.match(location.pathname);
               const label = t(item.labelKey);
@@ -203,7 +216,7 @@ export function TopNav({ breadcrumbs, onHome, onLogout }: TopNavProps) {
         className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/96 px-2 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/94 dark:shadow-[0_-18px_40px_rgba(0,0,0,0.35)] lg:hidden"
       >
         <div className="mx-auto grid w-full max-w-md grid-cols-5 gap-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = item.match(location.pathname);
             const label = t(item.labelKey);

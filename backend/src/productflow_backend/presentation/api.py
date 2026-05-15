@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from productflow_backend.config import get_settings
@@ -25,6 +24,7 @@ from productflow_backend.infrastructure.queue import (
     recover_unfinished_workflow_runs,
 )
 from productflow_backend.presentation.errors import register_exception_handlers
+from productflow_backend.presentation.routes.account import router as account_router
 from productflow_backend.presentation.routes.auth import router as auth_router
 from productflow_backend.presentation.routes.gallery import router as gallery_router
 from productflow_backend.presentation.routes.generation_queue import router as generation_queue_router
@@ -59,12 +59,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=settings.session_secret,
-        same_site="lax",
-        https_only=settings.session_cookie_secure,
-    )
     app.add_middleware(RequestIdMiddleware)
 
     @app.get("/healthz")
@@ -72,6 +66,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth_router)
+    app.include_router(account_router)
     app.include_router(generation_queue_router)
     app.include_router(gallery_router)
     app.include_router(products_router)

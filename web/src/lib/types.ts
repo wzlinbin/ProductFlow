@@ -31,9 +31,54 @@ export type CanvasTemplateScenario =
   | "short_video_cover"
   | "white_background";
 
+export interface ViewerUser {
+  owner_id: string;
+  sub2api_user_id: string;
+  email: string | null;
+  username: string | null;
+  role: string;
+}
+
 export interface SessionState {
   authenticated: boolean;
   access_required: boolean;
+  user?: ViewerUser | null;
+  is_admin?: boolean;
+  owner_id?: string | null;
+  api_key_source?: string;
+  api_key_status?: string | null;
+}
+
+export interface PublicAuthSettings {
+  registration_enabled: boolean;
+  email_verify_enabled: boolean;
+  force_email_on_third_party_signup: boolean;
+  promo_code_enabled: boolean;
+  invitation_code_enabled: boolean;
+  totp_enabled: boolean;
+  turnstile_enabled: boolean;
+  turnstile_site_key: string;
+  backend_mode_enabled: boolean;
+  site_name: string;
+  site_subtitle: string;
+}
+
+export interface AuthResult {
+  ok: boolean;
+  viewer?: SessionState | null;
+  requires_2fa: boolean;
+  challenge_id?: string | null;
+  user_email_masked?: string | null;
+}
+
+export interface AccountResponse {
+  user: ViewerUser & {
+    authenticated: boolean;
+    api_key_source: string;
+    api_key_status: string | null;
+    provider_key_fingerprint?: string | null;
+  };
+  balance: Record<string, unknown>;
 }
 
 export interface SourceAsset {

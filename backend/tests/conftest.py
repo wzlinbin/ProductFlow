@@ -18,6 +18,7 @@ def configured_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("ADMIN_ACCESS_KEY", "super-secret-admin-key")
     monkeypatch.setenv("SETTINGS_ACCESS_TOKEN", "super-secret-settings-token")
     monkeypatch.setenv("SESSION_SECRET", "super-secret-session-key-123")
+    monkeypatch.setenv("CREDENTIAL_VAULT_KEY", "test-credential-vault-key-32-bytes-long")
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/9")

@@ -78,15 +78,20 @@ def _product_query():
     )
 
 
-def _get_product_or_raise(session: Session, product_id: str) -> Product:
-    product = session.scalar(_product_query().where(Product.id == product_id))
+def _get_product_or_raise(session: Session, product_id: str, owner_id: str) -> Product:
+    product = session.scalar(_product_query().where(Product.id == product_id, Product.owner_id == owner_id))
     if product is None:
         raise NotFoundError("商品不存在")
     return product
 
 
-def _get_copy_set_or_raise(session: Session, copy_set_id: str) -> CopySet:
-    stmt = select(CopySet).options(selectinload(CopySet.product)).where(CopySet.id == copy_set_id)
+def _get_copy_set_or_raise(session: Session, copy_set_id: str, owner_id: str) -> CopySet:
+    stmt = (
+        select(CopySet)
+        .join(Product, CopySet.product_id == Product.id)
+        .options(selectinload(CopySet.product))
+        .where(CopySet.id == copy_set_id, Product.owner_id == owner_id)
+    )
     copy_set = session.scalar(stmt)
     if copy_set is None:
         raise NotFoundError("文案不存在")
@@ -118,6 +123,7 @@ def _product_status_filter(status: ProductWorkflowState):
 def create_product(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     name: str,
     category: str | None,
     price: str | None,
@@ -133,6 +139,7 @@ def create_product(
     canvas_template = resolve_product_creation_canvas_template(canvas_template_key)
     storage = storage or LocalStorage()
     product = Product(
+        owner_id=owner_id,
         name=_normalize_required_text(name, field_name="商品名", max_length=255),
         category=_normalize_optional_text(category, field_name="类目", max_length=120),
         price=_normalize_price(price),
@@ -170,17 +177,18 @@ def create_product(
         )
     session.commit()
     session.expire_all()
-    return _get_product_or_raise(session, product.id)
+    return _get_product_or_raise(session, product.id, owner_id)
 
 
 def add_reference_images(
     session: Session,
     *,
+    owner_id: str,
     product_id: str,
     reference_image_uploads: list[tuple[bytes, str, str]],
     storage: LocalStorage | None = None,
 ) -> Product:
-    product = _get_product_or_raise(session, product_id)
+    product = _get_product_or_raise(session, product_id, owner_id)
     storage = storage or LocalStorage()
     for reference_bytes, reference_filename, reference_content_type in reference_image_uploads:
         reference_path = storage.save_reference_upload(product.id, reference_filename, reference_bytes)
@@ -195,12 +203,13 @@ def add_reference_images(
         )
     session.commit()
     session.expire_all()
-    return _get_product_or_raise(session, product.id)
+    return _get_product_or_raise(session, product.id, owner_id)
 
 
 def delete_reference_image(
     session: Session,
     *,
+    owner_id: str,
     asset_id: str,
     storage: LocalStorage | None = None,
 ) -> Product:
@@ -213,18 +222,19 @@ def delete_reference_image(
     product_id = asset.product_id
     storage_path = asset.storage_path
     storage = storage or LocalStorage()
-    product = _get_product_or_raise(session, product_id)
+    product = _get_product_or_raise(session, product_id, owner_id)
     product.updated_at = now_utc()
     session.delete(asset)
     session.commit()
     storage.delete_image_with_variants(storage_path)
     session.expire_all()
-    return _get_product_or_raise(session, product_id)
+    return _get_product_or_raise(session, product_id, owner_id)
 
 
 def list_products(
     session: Session,
     *,
+    owner_id: str,
     status: ProductWorkflowState | None,
     page: int,
     page_size: int,
@@ -232,28 +242,30 @@ def list_products(
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
     start = (page - 1) * page_size
+    owner_filter = Product.owner_id == owner_id
     if status is None:
-        total = session.scalar(select(func.count()).select_from(Product)) or 0
-        products = session.scalars(_product_query().offset(start).limit(page_size)).all()
+        total = session.scalar(select(func.count()).select_from(Product).where(owner_filter)) or 0
+        products = session.scalars(_product_query().where(owner_filter).offset(start).limit(page_size)).all()
         return list(products), total
 
     status_filter = _product_status_filter(status)
-    total = session.scalar(select(func.count()).select_from(Product).where(status_filter)) or 0
-    products = session.scalars(_product_query().where(status_filter).offset(start).limit(page_size)).all()
+    total = session.scalar(select(func.count()).select_from(Product).where(owner_filter, status_filter)) or 0
+    products = session.scalars(_product_query().where(owner_filter, status_filter).offset(start).limit(page_size)).all()
     return list(products), total
 
 
-def get_product_detail(session: Session, product_id: str) -> Product:
-    return _get_product_or_raise(session, product_id)
+def get_product_detail(session: Session, product_id: str, owner_id: str) -> Product:
+    return _get_product_or_raise(session, product_id, owner_id)
 
 
 def delete_product(
     session: Session,
     *,
+    owner_id: str,
     product_id: str,
     storage: LocalStorage | None = None,
 ) -> None:
-    product = _get_product_or_raise(session, product_id)
+    product = _get_product_or_raise(session, product_id, owner_id)
     active_workflow_run = session.scalar(
         select(WorkflowRun)
         .join(ProductWorkflow, WorkflowRun.workflow_id == ProductWorkflow.id)
@@ -273,10 +285,11 @@ def delete_product(
 def update_copy_set(
     session: Session,
     *,
+    owner_id: str,
     copy_set_id: str,
     structured_payload: dict[str, Any],
 ) -> CopySet:
-    copy_set = _get_copy_set_or_raise(session, copy_set_id)
+    copy_set = _get_copy_set_or_raise(session, copy_set_id, owner_id)
     try:
         payload = normalize_copy_payload(structured_payload)
     except ValueError as exc:
@@ -288,9 +301,9 @@ def update_copy_set(
     return copy_set
 
 
-def confirm_copy_set(session: Session, *, copy_set_id: str) -> CopySet:
-    copy_set = _get_copy_set_or_raise(session, copy_set_id)
-    product = _get_product_or_raise(session, copy_set.product_id)
+def confirm_copy_set(session: Session, *, owner_id: str, copy_set_id: str) -> CopySet:
+    copy_set = _get_copy_set_or_raise(session, copy_set_id, owner_id)
+    product = _get_product_or_raise(session, copy_set.product_id, owner_id)
     copy_set.status = CopyStatus.CONFIRMED
     copy_set.confirmed_at = now_utc()
     product.current_confirmed_copy_set_id = copy_set.id
@@ -299,8 +312,8 @@ def confirm_copy_set(session: Session, *, copy_set_id: str) -> CopySet:
     return copy_set
 
 
-def get_product_history(session: Session, product_id: str) -> dict[str, Any]:
-    product = _get_product_or_raise(session, product_id)
+def get_product_history(session: Session, product_id: str, owner_id: str) -> dict[str, Any]:
+    product = _get_product_or_raise(session, product_id, owner_id)
     return {
         "copy_sets": sorted(product.copy_sets, key=lambda item: item.created_at, reverse=True),
         "poster_variants": sorted(product.poster_variants, key=lambda item: item.created_at, reverse=True),

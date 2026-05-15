@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import secrets
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,7 @@ from productflow_backend.config import (
     normalize_image_generation_size,
     parse_image_tool_allowed_fields,
 )
-from productflow_backend.infrastructure.db.models import AppSetting
+from productflow_backend.infrastructure.db.models import AppSetting, AuthSession
 from productflow_backend.infrastructure.provider_config import (
     UNSET_PROVIDER_FIELD,
     archive_provider_profile,
@@ -30,7 +31,7 @@ from productflow_backend.infrastructure.provider_config import (
     update_provider_binding,
     update_provider_profile,
 )
-from productflow_backend.presentation.deps import get_session, require_admin
+from productflow_backend.presentation.deps import CurrentUser, as_utc, get_session, require_admin
 from productflow_backend.presentation.schemas.settings import (
     ConfigItemResponse,
     ConfigOptionResponse,
@@ -55,10 +56,19 @@ def _settings_token_configured() -> bool:
     return bool(token and token.strip())
 
 
-def require_settings_unlocked(request: Request) -> None:
+def require_settings_unlocked(
+    current_user: CurrentUser = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> None:
     if not _settings_token_configured():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="设置解锁令牌未配置，请联系管理员")
-    if not request.session.get("settings_unlocked"):
+    auth_session = session.get(AuthSession, current_user.session_id)
+    if auth_session is None or auth_session.settings_unlocked_at is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先解锁系统配置")
+    expires_at = as_utc(auth_session.settings_unlocked_at) + timedelta(seconds=get_runtime_settings().settings_unlock_ttl_seconds)
+    if expires_at <= datetime.now(UTC):
+        auth_session.settings_unlocked_at = None
+        session.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先解锁系统配置")
 
 
@@ -155,22 +165,42 @@ def _serialize_provider_config(session: Session) -> ProviderConfigResponse:
 
 
 @router.get("/lock-state", response_model=SettingsLockStateResponse)
-def get_settings_lock_state_endpoint(request: Request) -> SettingsLockStateResponse:
+def get_settings_lock_state_endpoint(
+    current_user: CurrentUser = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> SettingsLockStateResponse:
     configured = _settings_token_configured()
-    return SettingsLockStateResponse(
-        unlocked=configured and bool(request.session.get("settings_unlocked")),
-        configured=configured,
-    )
+    unlocked = False
+    if configured:
+        if current_user.session_id == "dev-session":
+            unlocked = True
+        else:
+            auth_session = session.get(AuthSession, current_user.session_id)
+            if auth_session and auth_session.settings_unlocked_at:
+                expires_at = as_utc(auth_session.settings_unlocked_at) + timedelta(
+                    seconds=get_runtime_settings().settings_unlock_ttl_seconds,
+                )
+                unlocked = expires_at > datetime.now(UTC)
+    return SettingsLockStateResponse(unlocked=unlocked, configured=configured)
 
 
 @router.post("/unlock", response_model=SettingsLockStateResponse)
-def unlock_settings_endpoint(payload: SettingsUnlockRequest, request: Request) -> SettingsLockStateResponse:
+def unlock_settings_endpoint(
+    payload: SettingsUnlockRequest,
+    current_user: CurrentUser = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> SettingsLockStateResponse:
     expected_token = (get_settings().settings_access_token or "").strip()
     if not expected_token:
         raise HTTPException(status_code=503, detail="设置解锁令牌未配置，请联系管理员")
     if not secrets.compare_digest(payload.token, expected_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="设置解锁令牌不正确")
-    request.session["settings_unlocked"] = True
+    if current_user.session_id != "dev-session":
+        auth_session = session.get(AuthSession, current_user.session_id)
+        if auth_session is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
+        auth_session.settings_unlocked_at = datetime.now(UTC)
+        session.commit()
     return SettingsLockStateResponse(unlocked=True, configured=True)
 
 

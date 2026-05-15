@@ -10,6 +10,7 @@ dependencies = [
   "fastapi>=0.115.12",
   "httpx>=0.28.1",
   "itsdangerous>=2.2.0",
+  "cryptography>=45.0.0",
   "openai>=1.107.1",
   "pillow>=11.2.1",
   "psycopg[binary]>=3.2.9",

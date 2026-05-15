@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from productflow_backend.application.image_sessions import (
@@ -18,9 +19,10 @@ from productflow_backend.application.image_sessions import (
     submit_image_session_generation_task,
     update_image_session,
 )
-from productflow_backend.infrastructure.db.models import ImageSessionAsset
+from productflow_backend.config import get_settings
+from productflow_backend.infrastructure.db.models import ImageSession, ImageSessionAsset
 from productflow_backend.infrastructure.storage import ImageVariantName, LocalStorage
-from productflow_backend.presentation.deps import get_session, require_admin, require_deletion_enabled
+from productflow_backend.presentation.deps import CurrentUser, get_session, require_deletion_enabled, require_user
 from productflow_backend.presentation.image_variants import build_variant_filename
 from productflow_backend.presentation.schemas.image_sessions import (
     AttachImageSessionAssetRequest,
@@ -40,42 +42,46 @@ from productflow_backend.presentation.upload_validation import (
     validate_reference_image_count,
 )
 
-router = APIRouter(prefix="/api", tags=["image-sessions"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/api", tags=["image-sessions"], dependencies=[Depends(require_user)])
 
 
 @router.get("/image-sessions", response_model=ImageSessionListResponse)
 def list_image_sessions_endpoint(
     product_id: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionListResponse:
-    items = list_image_sessions(session, product_id=product_id)
+    items = list_image_sessions(session, owner_id=current_user.owner_id, product_id=product_id)
     return ImageSessionListResponse(items=[serialize_image_session_summary(item) for item in items])
 
 
 @router.post("/image-sessions", response_model=ImageSessionDetailResponse, status_code=status.HTTP_201_CREATED)
 def create_image_session_endpoint(
     payload: CreateImageSessionRequest,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
-    image_session = create_image_session(session, product_id=payload.product_id, title=payload.title)
+    image_session = create_image_session(session, owner_id=current_user.owner_id, product_id=payload.product_id, title=payload.title)
     return serialize_image_session_detail(image_session)
 
 
 @router.get("/image-sessions/{image_session_id}", response_model=ImageSessionDetailResponse)
 def get_image_session_detail_endpoint(
     image_session_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
-    image_session = get_image_session_detail(session, image_session_id)
+    image_session = get_image_session_detail(session, image_session_id, current_user.owner_id)
     return serialize_image_session_detail(image_session)
 
 
 @router.get("/image-sessions/{image_session_id}/status", response_model=ImageSessionStatusResponse)
 def get_image_session_status_endpoint(
     image_session_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionStatusResponse:
-    snapshot = get_image_session_status(session, image_session_id)
+    snapshot = get_image_session_status(session, image_session_id, current_user.owner_id)
     return serialize_image_session_status(snapshot)
 
 
@@ -83,9 +89,10 @@ def get_image_session_status_endpoint(
 def update_image_session_endpoint(
     image_session_id: str,
     payload: UpdateImageSessionRequest,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
-    image_session = update_image_session(session, image_session_id=image_session_id, title=payload.title)
+    image_session = update_image_session(session, owner_id=current_user.owner_id, image_session_id=image_session_id, title=payload.title)
     return serialize_image_session_detail(image_session)
 
 
@@ -96,15 +103,17 @@ def update_image_session_endpoint(
 )
 def delete_image_session_endpoint(
     image_session_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> None:
-    delete_image_session(session, image_session_id=image_session_id)
+    delete_image_session(session, owner_id=current_user.owner_id, image_session_id=image_session_id)
 
 
 @router.post("/image-sessions/{image_session_id}/reference-images", response_model=ImageSessionDetailResponse)
 async def upload_image_session_reference_images_endpoint(
     image_session_id: str,
     reference_images: list[UploadFile] = File(...),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
     payloads: list[tuple[bytes, str, str]] = []
@@ -120,6 +129,7 @@ async def upload_image_session_reference_images_endpoint(
         )
     image_session = add_image_session_reference_images(
         session,
+        owner_id=current_user.owner_id,
         image_session_id=image_session_id,
         reference_image_uploads=payloads,
     )
@@ -133,10 +143,12 @@ async def upload_image_session_reference_images_endpoint(
 def delete_image_session_reference_image_endpoint(
     image_session_id: str,
     asset_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
     image_session = delete_image_session_reference_image(
         session,
+        owner_id=current_user.owner_id,
         image_session_id=image_session_id,
         asset_id=asset_id,
     )
@@ -151,10 +163,18 @@ def delete_image_session_reference_image_endpoint(
 def generate_image_session_round_endpoint(
     image_session_id: str,
     payload: GenerateImageSessionRoundRequest,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
+    if not current_user.credential_id and not current_user.is_admin:
+        raise HTTPException(status_code=409, detail={"code": "API_KEY_UNAVAILABLE", "message": "当前账号暂无可用 API Key"})
     image_session = submit_image_session_generation_task(
         session,
+        owner_id=current_user.owner_id,
+        sub2api_user_id=current_user.sub2api_user_id,
+        credential_id=current_user.credential_id,
+        provider_base_url=get_settings().sub2api_provider_base_url,
+        provider_key_fingerprint=current_user.provider_key_fingerprint,
         image_session_id=image_session_id,
         prompt=payload.prompt,
         size=payload.size,
@@ -174,10 +194,12 @@ def generate_image_session_round_endpoint(
 def retry_image_session_generation_task_endpoint(
     image_session_id: str,
     task_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
     image_session = retry_image_session_generation_task(
         session,
+        owner_id=current_user.owner_id,
         image_session_id=image_session_id,
         task_id=task_id,
     )
@@ -191,10 +213,12 @@ def retry_image_session_generation_task_endpoint(
 def cancel_image_session_generation_task_endpoint(
     image_session_id: str,
     task_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ImageSessionDetailResponse:
     image_session = cancel_image_session_generation_task(
         session,
+        owner_id=current_user.owner_id,
         image_session_id=image_session_id,
         task_id=task_id,
     )
@@ -209,10 +233,12 @@ def attach_image_session_asset_to_product_endpoint(
     image_session_id: str,
     asset_id: str,
     payload: AttachImageSessionAssetRequest,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ProductWritebackResponse:
     product = attach_image_session_asset_to_product(
         session,
+        owner_id=current_user.owner_id,
         image_session_id=image_session_id,
         asset_id=asset_id,
         target=payload.target,
@@ -226,9 +252,14 @@ def attach_image_session_asset_to_product_endpoint(
 def download_image_session_asset_endpoint(
     asset_id: str,
     variant: ImageVariantName = Query(default="original"),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> FileResponse:
-    asset = session.get(ImageSessionAsset, asset_id)
+    asset = session.scalar(
+        select(ImageSessionAsset)
+        .join(ImageSession, ImageSessionAsset.session_id == ImageSession.id)
+        .where(ImageSessionAsset.id == asset_id, ImageSession.owner_id == current_user.owner_id)
+    )
     if asset is None:
         raise HTTPException(status_code=404, detail="会话图片不存在")
     storage = LocalStorage()

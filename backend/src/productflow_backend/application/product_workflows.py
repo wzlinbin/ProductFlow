@@ -46,8 +46,8 @@ def latest_workflow_runs(workflow: ProductWorkflow, limit: int = 10) -> list[Wor
     return _latest_workflow_runs(workflow, limit=limit)
 
 
-def get_product_workflow_status(session, product_id: str) -> ProductWorkflowStatusSnapshot:
-    return _get_active_workflow_status(session, product_id)
+def get_product_workflow_status(session, product_id: str, owner_id: str) -> ProductWorkflowStatusSnapshot:
+    return _get_active_workflow_status(session, product_id, owner_id)
 
 
 __all__ = [

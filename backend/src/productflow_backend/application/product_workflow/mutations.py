@@ -155,18 +155,18 @@ def _normalize_node_config(node_type: WorkflowNodeType, config_json: dict[str, A
     return config
 
 
-def get_or_create_product_workflow(session: Session, product_id: str) -> ProductWorkflow:
-    existing = product_workflow_graph.get_active_workflow(session, product_id)
+def get_or_create_product_workflow(session: Session, product_id: str, owner_id: str | None = None) -> ProductWorkflow:
+    existing = product_workflow_graph.get_active_workflow(session, product_id, owner_id)
     if existing is not None:
         if _normalize_product_context_singleton(session, existing):
             session.commit()
             session.expire_all()
             return product_workflow_graph.get_active_workflow(
-                session, product_id
-            ) or product_workflow_graph.get_workflow_or_raise(session, existing.id)
+                session, product_id, owner_id
+            ) or product_workflow_graph.get_workflow_or_raise(session, existing.id, owner_id)
         return existing
 
-    product = product_workflow_graph.get_product_or_raise(session, product_id)
+    product = product_workflow_graph.get_product_or_raise(session, product_id, owner_id)
     workflow = ProductWorkflow(
         product_id=product.id,
         title=product_workflow_graph.DEFAULT_WORKFLOW_TITLE,
@@ -188,19 +188,20 @@ def get_or_create_product_workflow(session: Session, product_id: str) -> Product
         session.commit()
     except IntegrityError:
         session.rollback()
-        existing = product_workflow_graph.get_active_workflow(session, product_id)
+        existing = product_workflow_graph.get_active_workflow(session, product_id, owner_id)
         if existing is not None:
             return existing
         raise
     session.expire_all()
     return product_workflow_graph.get_active_workflow(
-        session, product_id
-    ) or product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+        session, product_id, owner_id
+    ) or product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
 def create_workflow_node(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     product_id: str,
     node_type: WorkflowNodeType,
     title: str,
@@ -208,7 +209,7 @@ def create_workflow_node(
     position_y: int,
     config_json: dict[str, Any] | None,
 ) -> ProductWorkflow:
-    workflow = get_or_create_product_workflow(session, product_id)
+    workflow = get_or_create_product_workflow(session, product_id, owner_id)
     if node_type == WorkflowNodeType.PRODUCT_CONTEXT and any(
         node.node_type == WorkflowNodeType.PRODUCT_CONTEXT for node in workflow.nodes
     ):
@@ -225,21 +226,22 @@ def create_workflow_node(
     workflow.updated_at = now_utc()
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
 def apply_node_group_template_to_workflow(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     product_id: str,
     template_key: str,
     position_x: int,
     position_y: int,
 ) -> ProductWorkflow:
-    template = get_canvas_template(session, template_key.strip())
-    workflow = product_workflow_graph.get_active_workflow(session, product_id)
+    template = get_canvas_template(session, template_key.strip(), owner_id)
+    workflow = product_workflow_graph.get_active_workflow(session, product_id, owner_id)
     if workflow is None:
-        product_workflow_graph.get_product_or_raise(session, product_id)
+        product_workflow_graph.get_product_or_raise(session, product_id, owner_id)
         raise BusinessValidationError("需要先创建或打开画布后才能添加模板")
     # 模板里的商品资料节点是占位符，落到已有画布时要映射到当前商品资料节点。
     needs_product_context = any(
@@ -280,7 +282,7 @@ def apply_node_group_template_to_workflow(
     workflow.updated_at = now_utc()
     session.flush()
     session.expire(workflow, ["nodes", "edges"])
-    refreshed = product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    refreshed = product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
     try:
         product_workflow_graph.topological_nodes(refreshed)
     except BusinessError:
@@ -291,12 +293,13 @@ def apply_node_group_template_to_workflow(
         raise BusinessValidationError(str(exc)) from exc
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
 def update_workflow_node(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     node_id: str,
     title: str | None,
     position_x: int | None,
@@ -304,6 +307,7 @@ def update_workflow_node(
     config_json: dict[str, Any] | None,
 ) -> ProductWorkflow:
     node = product_workflow_graph.get_node_or_raise(session, node_id)
+    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id, owner_id)
     if title is not None:
         node.title = title.strip() or product_workflow_graph.default_title_for_type(node.node_type)
     if position_x is not None:
@@ -312,23 +316,24 @@ def update_workflow_node(
         node.position_y = position_y
     if config_json is not None:
         node.config_json = _normalize_node_config(node.node_type, config_json)
-    node.workflow.updated_at = now_utc()
+    workflow.updated_at = now_utc()
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, node.workflow_id)
+    return product_workflow_graph.get_workflow_or_raise(session, node.workflow_id, owner_id)
 
 
 def update_workflow_copy_set(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     node_id: str,
     structured_payload: dict[str, Any],
 ) -> ProductWorkflow:
     node = product_workflow_graph.get_node_or_raise(session, node_id)
+    workflow_id = node.workflow_id
+    workflow = product_workflow_graph.get_workflow_or_raise(session, workflow_id, owner_id)
     if node.node_type != WorkflowNodeType.COPY_GENERATION:
         raise BusinessValidationError("只有文案节点可以编辑文案")
-    workflow_id = node.workflow_id
-    workflow = product_workflow_graph.get_workflow_or_raise(session, workflow_id)
     copy_set_id = (node.output_json or {}).get("copy_set_id")
     if not isinstance(copy_set_id, str) or not copy_set_id:
         raise BusinessValidationError("文案节点还没有生成文案")
@@ -339,6 +344,7 @@ def update_workflow_copy_set(
 
     copy_set = update_copy_set(
         session,
+        owner_id=owner_id,
         copy_set_id=copy_set.id,
         structured_payload=structured_payload,
     )
@@ -350,12 +356,13 @@ def update_workflow_copy_set(
     node.workflow.product.updated_at = now_utc()
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow_id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow_id, owner_id)
 
 
 def upload_workflow_node_image(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     node_id: str,
     image_bytes: bytes,
     filename: str,
@@ -366,9 +373,9 @@ def upload_workflow_node_image(
 ) -> ProductWorkflow:
     """把上传图存为商品参考图，并绑定到参考图节点输出。"""
     node = product_workflow_graph.get_node_or_raise(session, node_id)
+    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id, owner_id)
     if node.node_type != WorkflowNodeType.REFERENCE_IMAGE:
         raise BusinessValidationError("只有参考图节点可以上传图片")
-    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id)
     storage = storage or LocalStorage()
     relative_path = storage.save_reference_upload(workflow.product_id, filename, image_bytes)
     asset = SourceAsset(
@@ -402,12 +409,13 @@ def upload_workflow_node_image(
     workflow.product.updated_at = now_utc()
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
 def bind_workflow_node_image(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     node_id: str,
     source_asset_id: str | None = None,
     poster_variant_id: str | None = None,
@@ -422,9 +430,9 @@ def bind_workflow_node_image(
         raise BusinessValidationError("请选择一张图片")
 
     node = product_workflow_graph.get_node_or_raise(session, node_id)
+    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id, owner_id)
     if node.node_type != WorkflowNodeType.REFERENCE_IMAGE:
         raise BusinessValidationError("只有参考图节点可以填充图片")
-    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id)
 
     source_poster_variant_id: str | None = None
     if source_asset_id:
@@ -467,19 +475,20 @@ def bind_workflow_node_image(
     workflow.product.updated_at = now_utc()
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
 def create_workflow_edge(
     session: Session,
     *,
+    owner_id: str = "dev:admin",
     product_id: str,
     source_node_id: str,
     target_node_id: str,
     source_handle: str | None = None,
     target_handle: str | None = None,
 ) -> ProductWorkflow:
-    workflow = get_or_create_product_workflow(session, product_id)
+    workflow = get_or_create_product_workflow(session, product_id, owner_id)
     nodes = {node.id for node in workflow.nodes}
     if source_node_id == target_node_id:
         raise BusinessValidationError("工作流连线不能连接到自身")
@@ -496,7 +505,7 @@ def create_workflow_edge(
     workflow.updated_at = now_utc()
     session.flush()
     session.expire(workflow, ["nodes", "edges"])
-    refreshed = product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    refreshed = product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
     try:
         product_workflow_graph.topological_nodes(refreshed)
     except BusinessError:
@@ -507,22 +516,23 @@ def create_workflow_edge(
         raise BusinessValidationError(str(exc)) from exc
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
-def delete_workflow_edge(session: Session, *, edge_id: str) -> ProductWorkflow:
+def delete_workflow_edge(session: Session, *, owner_id: str = "dev:admin", edge_id: str) -> ProductWorkflow:
     edge = product_workflow_graph.get_edge_or_raise(session, edge_id)
     workflow_id = edge.workflow_id
+    product_workflow_graph.get_workflow_or_raise(session, workflow_id, owner_id)
     edge.workflow.updated_at = now_utc()
     session.delete(edge)
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow_id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow_id, owner_id)
 
 
-def delete_workflow_node(session: Session, *, node_id: str) -> ProductWorkflow:
+def delete_workflow_node(session: Session, *, owner_id: str = "dev:admin", node_id: str) -> ProductWorkflow:
     node = product_workflow_graph.get_node_or_raise(session, node_id)
-    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id)
+    workflow = product_workflow_graph.get_workflow_or_raise(session, node.workflow_id, owner_id)
     if (
         _active_workflow_run(workflow) is not None
         or WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node.status)
@@ -542,7 +552,7 @@ def delete_workflow_node(session: Session, *, node_id: str) -> ProductWorkflow:
     session.delete(node)
     session.commit()
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow_id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow_id, owner_id)
 
 
 def _normalize_product_context_singleton(session: Session, workflow: ProductWorkflow) -> bool:

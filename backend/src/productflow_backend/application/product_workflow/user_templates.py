@@ -129,23 +129,25 @@ def user_canvas_template_to_canvas_template(row: UserCanvasTemplate) -> CanvasTe
     )
 
 
-def list_canvas_templates(session: Session) -> list[CanvasTemplate]:
+def list_canvas_templates(session: Session, owner_id: str) -> list[CanvasTemplate]:
     from productflow_backend.application.canvas_templates import list_builtin_canvas_templates
 
     user_templates = session.scalars(
         select(UserCanvasTemplate)
-        .where(UserCanvasTemplate.archived_at.is_(None))
+        .where(UserCanvasTemplate.owner_id == owner_id, UserCanvasTemplate.archived_at.is_(None))
         .order_by(UserCanvasTemplate.created_at.desc(), UserCanvasTemplate.id.desc())
     ).all()
     return [*list_builtin_canvas_templates(), *(user_canvas_template_to_canvas_template(row) for row in user_templates)]
 
 
-def get_canvas_template(session: Session, template_key: str) -> CanvasTemplate:
+def get_canvas_template(session: Session, template_key: str, owner_id: str | None = None) -> CanvasTemplate:
     from productflow_backend.application.canvas_templates import get_builtin_canvas_template
 
     key = template_key.strip()
     if key.startswith(USER_TEMPLATE_KEY_PREFIX):
-        row = _get_active_user_template_by_key(session, key)
+        if owner_id is None:
+            raise NotFoundError("用户模板不存在")
+        row = _get_active_user_template_by_key(session, key, owner_id)
         return user_canvas_template_to_canvas_template(row)
     return get_builtin_canvas_template(key)
 
@@ -153,6 +155,7 @@ def get_canvas_template(session: Session, template_key: str) -> CanvasTemplate:
 def create_user_canvas_template_from_workflow_nodes(
     session: Session,
     *,
+    owner_id: str,
     product_id: str,
     title: str,
     description: str | None,
@@ -166,9 +169,9 @@ def create_user_canvas_template_from_workflow_nodes(
     if len(set(node_ids)) != len(node_ids):
         raise BusinessValidationError("保存模板的节点不能重复")
 
-    workflow = product_workflow_graph.get_active_workflow(session, product_id)
+    product_workflow_graph.get_product_or_raise(session, product_id, owner_id)
+    workflow = product_workflow_graph.get_active_workflow(session, product_id, owner_id)
     if workflow is None:
-        product_workflow_graph.get_product_or_raise(session, product_id)
         raise BusinessValidationError("需要先创建或打开画布后才能保存模板")
 
     workflow_nodes_by_id = {node.id: node for node in workflow.nodes}
@@ -200,6 +203,7 @@ def create_user_canvas_template_from_workflow_nodes(
 
     template = UserCanvasTemplate(
         id=new_id(),
+        owner_id=owner_id,
         title=clean_title,
         description=(description or "").strip() or None,
         kind="node_group",
@@ -213,17 +217,18 @@ def create_user_canvas_template_from_workflow_nodes(
     user_canvas_template_to_canvas_template(template)
     session.commit()
     session.expire_all()
-    return _get_user_template_or_raise(session, template.id)
+    return _get_user_template_or_raise(session, template.id, owner_id)
 
 
 def rename_user_canvas_template(
     session: Session,
     *,
+    owner_id: str,
     template_id: str,
     title: str | None,
     description: str | None,
 ) -> UserCanvasTemplate:
-    template = _get_user_template_or_raise(session, template_id)
+    template = _get_user_template_or_raise(session, template_id, owner_id)
     if template.archived_at is not None:
         raise NotFoundError("用户模板不存在")
     if title is not None:
@@ -236,11 +241,11 @@ def rename_user_canvas_template(
     template.updated_at = now_utc()
     session.commit()
     session.expire_all()
-    return _get_user_template_or_raise(session, template_id)
+    return _get_user_template_or_raise(session, template_id, owner_id)
 
 
-def archive_user_canvas_template(session: Session, *, template_id: str) -> None:
-    template = _get_user_template_or_raise(session, template_id)
+def archive_user_canvas_template(session: Session, *, owner_id: str, template_id: str) -> None:
+    template = _get_user_template_or_raise(session, template_id, owner_id)
     if template.archived_at is None:
         template.archived_at = now_utc()
         template.updated_at = template.archived_at
@@ -256,16 +261,17 @@ def _parse_template_payload(row: UserCanvasTemplate) -> UserCanvasTemplatePayloa
     return payload
 
 
-def _get_user_template_or_raise(session: Session, template_id: str) -> UserCanvasTemplate:
-    template = session.get(UserCanvasTemplate, template_id)
+def _get_user_template_or_raise(session: Session, template_id: str, owner_id: str) -> UserCanvasTemplate:
+    template = session.scalar(select(UserCanvasTemplate).where(UserCanvasTemplate.id == template_id, UserCanvasTemplate.owner_id == owner_id))
     if template is None:
         raise NotFoundError("用户模板不存在")
     return template
 
 
-def _get_active_user_template_by_key(session: Session, key: str) -> UserCanvasTemplate:
+def _get_active_user_template_by_key(session: Session, key: str, owner_id: str) -> UserCanvasTemplate:
     template = session.scalar(
         select(UserCanvasTemplate).where(
+            UserCanvasTemplate.owner_id == owner_id,
             UserCanvasTemplate.key == key,
             UserCanvasTemplate.archived_at.is_(None),
         )

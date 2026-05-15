@@ -1,5 +1,7 @@
 import type {
+  AccountResponse,
   ApplyWorkflowTemplateGroupInput,
+  AuthResult,
   CanvasTemplateSummary,
   CanvasTemplateListResponse,
   ConfigResponse,
@@ -27,6 +29,7 @@ import type {
   ProductWorkflowStatus,
   ProductWritebackResponse,
   ProductListResponse,
+  PublicAuthSettings,
   RuntimeConfig,
   SettingsLockState,
   SessionState,
@@ -53,6 +56,19 @@ function toApiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
 }
 
+function formatApiDetail(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+  return "请求失败";
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(toApiUrl(path), {
     credentials: "include",
@@ -66,8 +82,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let detail = "请求失败";
     try {
-      const payload = (await response.json()) as { detail?: string };
-      detail = payload.detail ?? detail;
+      const payload = (await response.json()) as { detail?: unknown };
+      detail = formatApiDetail(payload.detail);
     } catch {
       detail = response.statusText || detail;
     }
@@ -82,17 +98,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   toApiUrl,
+  getAuthPublicSettings(): Promise<PublicAuthSettings> {
+    return request<PublicAuthSettings>("/api/auth/public-settings");
+  },
   getSessionState(): Promise<SessionState> {
     return request<SessionState>("/api/auth/session");
   },
-  createSession(adminKey: string): Promise<{ ok: boolean }> {
-    return request("/api/auth/session", {
+  sendVerifyCode(input: { email: string; turnstile_token?: string | null }): Promise<{ ok: boolean }> {
+    return request("/api/auth/send-verify-code", {
       method: "POST",
-      body: JSON.stringify({ admin_key: adminKey }),
+      body: JSON.stringify(input),
+    });
+  },
+  register(input: {
+    email: string;
+    password: string;
+    verify_code?: string | null;
+    turnstile_token?: string | null;
+    promo_code?: string | null;
+    invitation_code?: string | null;
+  }): Promise<AuthResult> {
+    return request("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  login(input: { email: string; password: string; turnstile_token?: string | null }): Promise<AuthResult> {
+    return request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  login2FA(input: { challenge_id: string; totp_code: string }): Promise<AuthResult> {
+    return request("/api/auth/login/2fa", {
+      method: "POST",
+      body: JSON.stringify(input),
     });
   },
   destroySession(): Promise<{ ok: boolean }> {
     return request("/api/auth/session", { method: "DELETE" });
+  },
+  getAccount(): Promise<AccountResponse> {
+    return request("/api/account");
+  },
+  getBalance(): Promise<Record<string, unknown>> {
+    return request("/api/account/balance");
   },
   listProducts(input?: { page?: number; page_size?: number }): Promise<ProductListResponse> {
     const page = input?.page ?? 1;

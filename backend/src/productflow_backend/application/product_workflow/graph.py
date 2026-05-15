@@ -60,8 +60,8 @@ def workflow_status_query():
     )
 
 
-def get_product_or_raise(session: Session, product_id: str) -> Product:
-    product = session.scalar(
+def get_product_or_raise(session: Session, product_id: str, owner_id: str | None = None) -> Product:
+    stmt = (
         select(Product)
         .options(
             selectinload(Product.source_assets),
@@ -72,23 +72,30 @@ def get_product_or_raise(session: Session, product_id: str) -> Product:
         )
         .where(Product.id == product_id)
     )
+    if owner_id is not None:
+        stmt = stmt.where(Product.owner_id == owner_id)
+    product = session.scalar(stmt)
     if product is None:
         raise NotFoundError("商品不存在")
     return product
 
 
-def get_workflow_or_raise(session: Session, workflow_id: str) -> ProductWorkflow:
-    workflow = session.scalar(workflow_query().where(ProductWorkflow.id == workflow_id))
+def get_workflow_or_raise(session: Session, workflow_id: str, owner_id: str | None = None) -> ProductWorkflow:
+    stmt = workflow_query().where(ProductWorkflow.id == workflow_id)
+    if owner_id is not None:
+        stmt = stmt.where(ProductWorkflow.product.has(Product.owner_id == owner_id))
+    workflow = session.scalar(stmt)
     if workflow is None:
         raise NotFoundError("工作流不存在")
     attach_workflow_run_queue_metadata(session, workflow.runs)
     return workflow
 
 
-def get_active_workflow(session: Session, product_id: str) -> ProductWorkflow | None:
-    workflow = session.scalar(
-        workflow_query().where(ProductWorkflow.product_id == product_id, ProductWorkflow.active.is_(True))
-    )
+def get_active_workflow(session: Session, product_id: str, owner_id: str | None = None) -> ProductWorkflow | None:
+    stmt = workflow_query().where(ProductWorkflow.product_id == product_id, ProductWorkflow.active.is_(True))
+    if owner_id is not None:
+        stmt = stmt.where(ProductWorkflow.product.has(Product.owner_id == owner_id))
+    workflow = session.scalar(stmt)
     if workflow is not None:
         attach_workflow_run_queue_metadata(session, workflow.runs)
     return workflow
@@ -106,12 +113,15 @@ def attach_workflow_run_queue_metadata(session: Session, runs: list[WorkflowRun]
         )
 
 
-def get_active_workflow_status(session: Session, product_id: str) -> ProductWorkflowStatusSnapshot:
-    workflow = session.scalar(
-        workflow_status_query().where(ProductWorkflow.product_id == product_id, ProductWorkflow.active.is_(True))
-    )
+def get_active_workflow_status(
+    session: Session, product_id: str, owner_id: str | None = None
+) -> ProductWorkflowStatusSnapshot:
+    stmt = workflow_status_query().where(ProductWorkflow.product_id == product_id, ProductWorkflow.active.is_(True))
+    if owner_id is not None:
+        stmt = stmt.where(ProductWorkflow.product.has(Product.owner_id == owner_id))
+    workflow = session.scalar(stmt)
     if workflow is None:
-        get_product_or_raise(session, product_id)
+        get_product_or_raise(session, product_id, owner_id)
         raise NotFoundError("工作流不存在")
     nodes = list(
         session.scalars(

@@ -117,6 +117,14 @@ class Settings(BaseSettings):
     app_port: int = 29280
     backend_cors_origins: str = "http://localhost:29281,http://127.0.0.1:29281"
     session_cookie_secure: bool = False
+    session_cookie_samesite: str = "lax"
+
+    sub2api_auth_base_url: str = ""
+    sub2api_provider_base_url: str = ""
+    sub2api_session_ttl_seconds: int = Field(default=7 * 24 * 60 * 60, ge=300)
+    sub2api_balance_cache_ttl_seconds: int = Field(default=60, ge=0, le=3600)
+    settings_unlock_ttl_seconds: int = Field(default=15 * 60, ge=60)
+    credential_vault_key: str = Field(min_length=32)
 
     admin_access_key: str = Field(min_length=8)
     settings_access_token: str | None = None
@@ -235,10 +243,25 @@ class Settings(BaseSettings):
     def _normalize_image_tool_allowed_fields(cls, value: Any) -> str:
         return normalize_image_tool_allowed_fields(value)
 
+    @field_validator("session_cookie_samesite", mode="before")
+    @classmethod
+    def _normalize_session_cookie_samesite(cls, value: Any) -> str:
+        normalized = str(value or "lax").strip().lower()
+        if normalized not in {"lax", "strict", "none"}:
+            raise ValueError("SESSION_COOKIE_SAMESITE 只能是 lax、strict 或 none")
+        return normalized
+
+    @field_validator("sub2api_auth_base_url", "sub2api_provider_base_url", mode="before")
+    @classmethod
+    def _normalize_sub2api_base_url(cls, value: Any) -> str:
+        return str(value or "").strip().rstrip("/")
+
     @model_validator(mode="after")
     def _validate_distinct_settings_token(self) -> Settings:
         if self.settings_access_token and self.settings_access_token.strip() == self.admin_access_key:
             raise ValueError("SETTINGS_ACCESS_TOKEN 必须与 ADMIN_ACCESS_KEY 分开设置")
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise ValueError("SESSION_COOKIE_SAMESITE=none 时必须启用 SESSION_COOKIE_SECURE")
         return self
 
     @property

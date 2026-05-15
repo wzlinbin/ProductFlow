@@ -101,14 +101,78 @@ class ProviderBinding(Base, TimestampMixin):
     provider_profile: Mapped[ProviderProfile | None] = relationship()
 
 
+class AuthSession(Base, TimestampMixin):
+    __tablename__ = "auth_sessions"
+    __table_args__ = (
+        Index("ix_auth_sessions_owner_id", "owner_id"),
+        Index("ix_auth_sessions_expires_at", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    sub2api_user_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(40), default="user")
+    encrypted_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credential_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user_provider_credentials.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    settings_unlocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+    credential: Mapped[UserProviderCredential | None] = relationship(foreign_keys=[credential_id])
+
+
+class AuthLoginChallenge(Base):
+    __tablename__ = "auth_login_challenges"
+    __table_args__ = (Index("ix_auth_login_challenges_expires_at", "expires_at"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=new_id)
+    encrypted_temp_token: Mapped[str] = mapped_column(Text, nullable=False)
+    email_masked: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class UserProviderCredential(Base):
+    __tablename__ = "user_provider_credentials"
+    __table_args__ = (
+        Index("ix_user_provider_credentials_owner_id", "owner_id"),
+        Index("ix_user_provider_credentials_api_key_id", "api_key_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    sub2api_user_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    api_key_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    encrypted_api_key: Mapped[str] = mapped_column(Text, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class UserCanvasTemplate(Base, TimestampMixin):
     """用户保存的可复用画布节点组模板。"""
 
     __tablename__ = "user_canvas_templates"
-    __table_args__ = (Index("ix_user_canvas_templates_archived_at", "archived_at"),)
+    __table_args__ = (
+        Index("ix_user_canvas_templates_owner_archived", "owner_id", "archived_at"),
+        Index("uq_user_canvas_templates_owner_key", "owner_id", "key", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False, default="dev:admin")
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     kind: Mapped[str] = mapped_column(String(40), default="node_group")
@@ -119,8 +183,10 @@ class UserCanvasTemplate(Base, TimestampMixin):
 
 class Product(Base, TimestampMixin):
     __tablename__ = "products"
+    __table_args__ = (Index("ix_products_owner_created", "owner_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False, default="dev:admin")
     name: Mapped[str] = mapped_column(String(255))
     category: Mapped[str | None] = mapped_column(String(120), nullable=True)
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -259,9 +325,19 @@ class WorkflowRun(Base):
     """一次工作流执行记录。"""
 
     __tablename__ = "workflow_runs"
+    __table_args__ = (Index("ix_workflow_runs_owner_status", "owner_id", "status"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     workflow_id: Mapped[str] = mapped_column(String(36), ForeignKey("product_workflows.id", ondelete="CASCADE"))
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False, default="dev:admin")
+    sub2api_user_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    credential_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user_provider_credentials.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    provider_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_key_fingerprint: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[WorkflowRunStatus] = mapped_column(
         enum_value_column(WorkflowRunStatus),
         default=WorkflowRunStatus.RUNNING,
@@ -421,8 +497,10 @@ class ImageSession(Base, TimestampMixin):
     """连续生图会话，含多轮对话历史与生成结果。"""
 
     __tablename__ = "image_sessions"
+    __table_args__ = (Index("ix_image_sessions_owner_updated", "owner_id", "updated_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False, default="dev:admin")
     product_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("products.id", ondelete="CASCADE"),
@@ -516,10 +594,20 @@ class ImageSessionGenerationTask(Base):
     __table_args__ = (
         Index("ix_image_session_generation_tasks_session_id", "session_id"),
         Index("ix_image_session_generation_tasks_status", "status"),
+        Index("ix_image_session_generation_tasks_owner_status", "owner_id", "status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey("image_sessions.id", ondelete="CASCADE"))
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False, default="dev:admin")
+    sub2api_user_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    credential_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user_provider_credentials.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    provider_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_key_fingerprint: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[JobStatus] = mapped_column(enum_value_column(JobStatus), default=JobStatus.QUEUED)
     prompt: Mapped[str] = mapped_column(Text)
     size: Mapped[str] = mapped_column(String(32))
@@ -562,9 +650,11 @@ class ImageGalleryEntry(Base):
         Index("uq_image_gallery_entries_asset_id", "image_session_asset_id", unique=True),
         Index("ix_image_gallery_entries_round_id", "image_session_round_id"),
         Index("ix_image_gallery_entries_created_at", "created_at"),
+        Index("ix_image_gallery_entries_owner_created", "owner_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(String(120), nullable=False, default="dev:admin")
     image_session_asset_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(

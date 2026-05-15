@@ -4,12 +4,12 @@ from productflow_backend.infrastructure.image.base import ImageProvider
 from productflow_backend.infrastructure.image.images_provider import OpenAIImagesImageProvider
 from productflow_backend.infrastructure.image.mock_provider import MockImageProvider
 from productflow_backend.infrastructure.image.responses_provider import OpenAIResponsesImageProvider
-from productflow_backend.infrastructure.provider_config import resolve_image_provider_config
+from productflow_backend.infrastructure.provider_config import ResolvedImageProviderConfig, resolve_image_provider_config
 
 
-def get_image_provider() -> ImageProvider:
+def get_image_provider(provider_config: ResolvedImageProviderConfig | None = None) -> ImageProvider:
     """根据统一供应商用途绑定选择图片生成供应商。"""
-    provider_config = resolve_image_provider_config()
+    provider_config = provider_config or resolve_image_provider_config()
     if provider_config.provider_kind == "mock":
         return MockImageProvider()
     if provider_config.provider_kind == "openai_responses":

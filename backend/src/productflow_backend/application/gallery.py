@@ -35,25 +35,34 @@ def _gallery_entry_query():
     )
 
 
-def list_gallery_entries(session: Session) -> list[ImageGalleryEntry]:
-    return list(session.scalars(_gallery_entry_query()).all())
+def list_gallery_entries(session: Session, *, owner_id: str) -> list[ImageGalleryEntry]:
+    return list(session.scalars(_gallery_entry_query().where(ImageGalleryEntry.owner_id == owner_id)).all())
 
 
-def _get_gallery_entry_by_asset_id(session: Session, image_session_asset_id: str) -> ImageGalleryEntry | None:
+def _get_gallery_entry_by_asset_id(
+    session: Session,
+    *,
+    owner_id: str,
+    image_session_asset_id: str,
+) -> ImageGalleryEntry | None:
     return session.scalar(
-        _gallery_entry_query().where(ImageGalleryEntry.image_session_asset_id == image_session_asset_id)
+        _gallery_entry_query().where(
+            ImageGalleryEntry.owner_id == owner_id,
+            ImageGalleryEntry.image_session_asset_id == image_session_asset_id,
+        )
     )
 
 
-def save_generated_asset_to_gallery(session: Session, *, image_session_asset_id: str) -> GallerySaveResult:
-    existing = _get_gallery_entry_by_asset_id(session, image_session_asset_id)
+def save_generated_asset_to_gallery(session: Session, *, owner_id: str, image_session_asset_id: str) -> GallerySaveResult:
+    existing = _get_gallery_entry_by_asset_id(session, owner_id=owner_id, image_session_asset_id=image_session_asset_id)
     if existing is not None:
         return GallerySaveResult(entry=existing, created=False)
 
     asset = session.scalar(
         select(ImageSessionAsset)
+        .join(ImageSession, ImageSessionAsset.session_id == ImageSession.id)
         .options(selectinload(ImageSessionAsset.session).selectinload(ImageSession.product))
-        .where(ImageSessionAsset.id == image_session_asset_id)
+        .where(ImageSessionAsset.id == image_session_asset_id, ImageSession.owner_id == owner_id)
     )
     if asset is None:
         raise NotFoundError("会话图片不存在")
@@ -65,6 +74,7 @@ def save_generated_asset_to_gallery(session: Session, *, image_session_asset_id:
         raise NotFoundError("生成记录不存在")
 
     entry = ImageGalleryEntry(
+        owner_id=owner_id,
         image_session_asset_id=asset.id,
         image_session_round_id=round_item.id,
     )
@@ -75,12 +85,15 @@ def save_generated_asset_to_gallery(session: Session, *, image_session_asset_id:
         session.commit()
     except IntegrityError:
         session.rollback()
-        existing = _get_gallery_entry_by_asset_id(session, image_session_asset_id)
+        existing = _get_gallery_entry_by_asset_id(session, owner_id=owner_id, image_session_asset_id=image_session_asset_id)
         if existing is not None:
             return GallerySaveResult(entry=existing, created=False)
         raise
     session.expire_all()
     return GallerySaveResult(
-        entry=session.scalar(_gallery_entry_query().where(ImageGalleryEntry.id == entry_id)) or entry,
+        entry=session.scalar(
+            _gallery_entry_query().where(ImageGalleryEntry.id == entry_id, ImageGalleryEntry.owner_id == owner_id)
+        )
+        or entry,
         created=True,
     )

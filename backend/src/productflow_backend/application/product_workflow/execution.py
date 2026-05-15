@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from dramatiq.middleware.time_limit import TimeLimitExceeded
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -64,22 +65,28 @@ from productflow_backend.domain.workflow_rules import (
     selected_node_execution_plan,
     should_execute_missing_upstream,
 )
+from productflow_backend.infrastructure.credential_vault import get_credential_vault
 from productflow_backend.infrastructure.db.models import (
     CopySet,
     CreativeBrief,
     Product,
     ProductWorkflow,
+    UserProviderCredential,
     WorkflowNode,
     WorkflowNodeRun,
     WorkflowRun,
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
+from productflow_backend.infrastructure.image.factory import get_image_provider
+from productflow_backend.infrastructure.provider_config import resolve_image_provider_config, resolve_text_provider_config
 from productflow_backend.infrastructure.queue import enqueue_workflow_run
 from productflow_backend.infrastructure.storage import LocalStorage
+from productflow_backend.infrastructure.text.factory import get_text_provider
 
 logger = logging.getLogger(__name__)
 
 COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS = 2
+TASK_KEY_EXPIRED_REASON = "TASK_KEY_EXPIRED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,14 +164,55 @@ def _workflow_run_retry_start_node_id(run: WorkflowRun) -> str | None:
     return ordered_started_nodes[-1].id
 
 
+def _workflow_execution_dependencies_for_run(session: Session, run: WorkflowRun) -> WorkflowExecutionDependencies:
+    text_config = resolve_text_provider_config()
+    image_config = resolve_image_provider_config()
+    if text_config.provider_kind == "mock" and image_config.provider_kind == "mock":
+        return default_workflow_execution_dependencies()
+    if not run.credential_id:
+        raise BusinessValidationError(TASK_KEY_EXPIRED_REASON)
+    credential = session.scalar(
+        select(UserProviderCredential).where(
+            UserProviderCredential.id == run.credential_id,
+            UserProviderCredential.owner_id == run.owner_id,
+            UserProviderCredential.revoked_at.is_(None),
+            UserProviderCredential.superseded_at.is_(None),
+        )
+    )
+    if credential is None:
+        raise BusinessValidationError(TASK_KEY_EXPIRED_REASON)
+    api_key = get_credential_vault().decrypt(credential.encrypted_api_key)
+    text_config = replace(
+        text_config,
+        api_key=api_key,
+        base_url=run.provider_base_url or text_config.base_url,
+        provider_profile_id=None,
+    )
+    image_config = replace(
+        image_config,
+        api_key=api_key,
+        base_url=run.provider_base_url or image_config.base_url,
+        provider_profile_id=None,
+    )
+    return WorkflowExecutionDependencies(
+        text_provider_resolver=lambda: get_text_provider(text_config),
+        image_provider_resolver=lambda: get_image_provider(image_config),
+    )
+
+
 def start_product_workflow_run(
     session: Session,
     *,
+    owner_id: str | None = None,
+    sub2api_user_id: str | None = None,
+    credential_id: str | None = None,
+    provider_base_url: str | None = None,
+    provider_key_fingerprint: str | None = None,
     product_id: str,
     start_node_id: str | None = None,
     progress_metadata: dict[str, Any] | None = None,
 ) -> WorkflowRunKickoff:
-    workflow = get_or_create_product_workflow(session, product_id)
+    workflow = get_or_create_product_workflow(session, product_id, owner_id)
     ordered_nodes = product_workflow_graph.topological_nodes(workflow)
     node_ids_to_run = _node_ids_to_run(session, workflow, start_node_id)
     if not node_ids_to_run:
@@ -179,8 +227,14 @@ def start_product_workflow_run(
         )
 
     ensure_generation_capacity(session)
+    run_owner_id = owner_id or workflow.product.owner_id
     run = WorkflowRun(
         workflow_id=workflow.id,
+        owner_id=run_owner_id,
+        sub2api_user_id=sub2api_user_id,
+        credential_id=credential_id,
+        provider_base_url=provider_base_url,
+        provider_key_fingerprint=provider_key_fingerprint,
         status=WorkflowRunStatus.RUNNING,
         progress_metadata=progress_metadata,
     )
@@ -210,7 +264,7 @@ def start_product_workflow_run(
         session.commit()
     except IntegrityError:
         session.rollback()
-        workflow = product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+        workflow = product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
         active_run = _active_workflow_run_for_nodes(workflow, node_ids_to_run)
         if active_run is not None:
             return WorkflowRunKickoff(
@@ -222,7 +276,7 @@ def start_product_workflow_run(
         raise
     session.expire_all()
     return WorkflowRunKickoff(
-        workflow=product_workflow_graph.get_workflow_or_raise(session, workflow.id),
+        workflow=product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id),
         run_id=run.id,
         created=True,
         should_enqueue=True,
@@ -232,11 +286,16 @@ def start_product_workflow_run(
 def retry_product_workflow_run(
     session: Session,
     *,
+    owner_id: str | None = None,
+    sub2api_user_id: str | None = None,
+    credential_id: str | None = None,
+    provider_base_url: str | None = None,
+    provider_key_fingerprint: str | None = None,
     product_id: str,
     run_id: str | None = None,
     enqueue: Callable[[str], None] | None = None,
 ) -> ProductWorkflow:
-    workflow = get_or_create_product_workflow(session, product_id)
+    workflow = get_or_create_product_workflow(session, product_id, owner_id)
     run = session.get(WorkflowRun, run_id) if run_id else _latest_failed_workflow_run(workflow)
     if run is None or run.workflow_id != workflow.id:
         raise NotFoundError("工作流运行不存在")
@@ -250,6 +309,11 @@ def retry_product_workflow_run(
         raise BusinessValidationError("相关节点运行中，不能重试")
     return submit_product_workflow_run(
         session,
+        owner_id=owner_id,
+        sub2api_user_id=sub2api_user_id,
+        credential_id=credential_id,
+        provider_base_url=provider_base_url,
+        provider_key_fingerprint=provider_key_fingerprint,
         product_id=product_id,
         start_node_id=start_node_id,
         enqueue=enqueue,
@@ -260,40 +324,60 @@ def retry_product_workflow_run(
 def cancel_product_workflow_run(
     session: Session,
     *,
+    owner_id: str | None = None,
     product_id: str,
     run_id: str | None = None,
 ) -> ProductWorkflow:
-    workflow = get_or_create_product_workflow(session, product_id)
+    workflow = get_or_create_product_workflow(session, product_id, owner_id)
     run = session.get(WorkflowRun, run_id) if run_id else _active_workflow_run(workflow)
     if run is None or run.workflow_id != workflow.id:
         raise NotFoundError("工作流运行不存在")
     if run.status == WorkflowRunStatus.CANCELLED:
-        return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+        return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
     if run.status in {WorkflowRunStatus.SUCCEEDED, WorkflowRunStatus.FAILED}:
         raise BusinessValidationError("已结束的工作流运行不能取消")
     mark_workflow_run_cancelled(session, run_id=run.id)
     session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return product_workflow_graph.get_workflow_or_raise(session, workflow.id, owner_id)
 
 
 def run_product_workflow(
     session: Session,
     *,
+    owner_id: str | None = None,
+    sub2api_user_id: str | None = None,
+    credential_id: str | None = None,
+    provider_base_url: str | None = None,
+    provider_key_fingerprint: str | None = None,
     product_id: str,
     start_node_id: str | None = None,
     dependencies: WorkflowExecutionDependencies | None = None,
 ) -> ProductWorkflow:
-    kickoff = start_product_workflow_run(session, product_id=product_id, start_node_id=start_node_id)
+    kickoff = start_product_workflow_run(
+        session,
+        owner_id=owner_id,
+        sub2api_user_id=sub2api_user_id,
+        credential_id=credential_id,
+        provider_base_url=provider_base_url,
+        provider_key_fingerprint=provider_key_fingerprint,
+        product_id=product_id,
+        start_node_id=start_node_id,
+    )
     if kickoff.created:
         execute_product_workflow_run(kickoff.run_id, dependencies=dependencies)
         session.expire_all()
-        return product_workflow_graph.get_workflow_or_raise(session, kickoff.workflow.id)
+        return product_workflow_graph.get_workflow_or_raise(session, kickoff.workflow.id, owner_id)
     return kickoff.workflow
 
 
 def submit_product_workflow_run(
     session: Session,
     *,
+    owner_id: str | None = None,
+    sub2api_user_id: str | None = None,
+    credential_id: str | None = None,
+    provider_base_url: str | None = None,
+    provider_key_fingerprint: str | None = None,
     product_id: str,
     start_node_id: str | None = None,
     enqueue: Callable[[str], None] | None = None,
@@ -301,6 +385,11 @@ def submit_product_workflow_run(
 ) -> ProductWorkflow:
     kickoff = start_product_workflow_run(
         session,
+        owner_id=owner_id,
+        sub2api_user_id=sub2api_user_id,
+        credential_id=credential_id,
+        provider_base_url=provider_base_url,
+        provider_key_fingerprint=provider_key_fingerprint,
         product_id=product_id,
         start_node_id=start_node_id,
         progress_metadata=progress_metadata,
@@ -383,6 +472,7 @@ def _execute_product_workflow_run(
         return
     if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_running(run.status):
         return
+    run_dependencies = dependencies or _workflow_execution_dependencies_for_run(session, run)
     workflow = queries.get_workflow_or_raise(run.workflow_id)
     ordered_nodes = product_workflow_graph.topological_nodes(workflow)
     run_node_ids = {node_run.node_id for node_run in run.node_runs}
@@ -423,7 +513,7 @@ def _execute_product_workflow_run(
                 node.id,
                 node.node_type.value,
             )
-            output = _execute_node(session, workflow_id=workflow.id, node=node, dependencies=dependencies)
+            output = _execute_node(session, workflow_id=workflow.id, node=node, dependencies=run_dependencies)
         except TimeLimitExceeded as exc:
             session.rollback()
             mark_workflow_run_failed(

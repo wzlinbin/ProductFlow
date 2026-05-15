@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from productflow_backend.application.use_cases import (
@@ -18,9 +19,9 @@ from productflow_backend.application.use_cases import (
     update_copy_set,
 )
 from productflow_backend.domain.enums import ProductWorkflowState
-from productflow_backend.infrastructure.db.models import PosterVariant, SourceAsset
+from productflow_backend.infrastructure.db.models import PosterVariant, Product, SourceAsset
 from productflow_backend.infrastructure.storage import ImageVariantName, LocalStorage
-from productflow_backend.presentation.deps import get_session, require_admin, require_deletion_enabled
+from productflow_backend.presentation.deps import CurrentUser, get_session, require_deletion_enabled, require_user
 from productflow_backend.presentation.image_variants import build_variant_filename
 from productflow_backend.presentation.schemas.products import (
     CopySetResponse,
@@ -38,7 +39,7 @@ from productflow_backend.presentation.upload_validation import (
     validate_reference_image_count,
 )
 
-router = APIRouter(prefix="/api", tags=["products"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/api", tags=["products"], dependencies=[Depends(require_user)])
 
 
 @router.post("/products", response_model=ProductDetailResponse, status_code=status.HTTP_201_CREATED)
@@ -50,6 +51,7 @@ async def create_product_endpoint(
     price: str | None = Form(default=None),
     source_note: str | None = Form(default=None),
     canvas_template_key: str | None = Form(default=None),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ProductDetailResponse:
     main_image = await read_validated_image_upload(image, fallback_filename="upload.bin")
@@ -66,6 +68,7 @@ async def create_product_endpoint(
         )
     product = create_product(
         session,
+        owner_id=current_user.owner_id,
         name=name,
         category=category,
         price=price,
@@ -84,9 +87,10 @@ def list_products_endpoint(
     status: ProductWorkflowState | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ProductListResponse:
-    items, total = list_products(session, status=status, page=page, page_size=page_size)
+    items, total = list_products(session, owner_id=current_user.owner_id, status=status, page=page, page_size=page_size)
     return ProductListResponse(
         items=[serialize_product_summary(item) for item in items],
         total=total,
@@ -96,8 +100,12 @@ def list_products_endpoint(
 
 
 @router.get("/products/{product_id}", response_model=ProductDetailResponse)
-def get_product_detail_endpoint(product_id: str, session: Session = Depends(get_session)) -> ProductDetailResponse:
-    return serialize_product_detail(get_product_detail(session, product_id))
+def get_product_detail_endpoint(
+    product_id: str,
+    current_user: CurrentUser = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> ProductDetailResponse:
+    return serialize_product_detail(get_product_detail(session, product_id, current_user.owner_id))
 
 
 @router.delete(
@@ -105,14 +113,19 @@ def get_product_detail_endpoint(product_id: str, session: Session = Depends(get_
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_deletion_enabled)],
 )
-def delete_product_endpoint(product_id: str, session: Session = Depends(get_session)) -> None:
-    delete_product(session, product_id=product_id)
+def delete_product_endpoint(
+    product_id: str,
+    current_user: CurrentUser = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> None:
+    delete_product(session, owner_id=current_user.owner_id, product_id=product_id)
 
 
 @router.post("/products/{product_id}/reference-images", response_model=ProductDetailResponse)
 async def upload_reference_images_endpoint(
     product_id: str,
     reference_images: list[UploadFile] = File(...),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ProductDetailResponse:
     reference_payloads: list[tuple[bytes, str, str]] = []
@@ -128,6 +141,7 @@ async def upload_reference_images_endpoint(
         )
     product = add_reference_images(
         session,
+        owner_id=current_user.owner_id,
         product_id=product_id,
         reference_image_uploads=reference_payloads,
     )
@@ -138,10 +152,12 @@ async def upload_reference_images_endpoint(
 def update_copy_set_endpoint(
     copy_set_id: str,
     payload: CopySetUpdateRequest,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> CopySetResponse:
     copy_set = update_copy_set(
         session,
+        owner_id=current_user.owner_id,
         copy_set_id=copy_set_id,
         structured_payload=payload.structured_payload,
     )
@@ -149,8 +165,12 @@ def update_copy_set_endpoint(
 
 
 @router.post("/copy-sets/{copy_set_id}/confirm", response_model=CopySetResponse)
-def confirm_copy_set_endpoint(copy_set_id: str, session: Session = Depends(get_session)) -> CopySetResponse:
-    copy_set = confirm_copy_set(session, copy_set_id=copy_set_id)
+def confirm_copy_set_endpoint(
+    copy_set_id: str,
+    current_user: CurrentUser = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> CopySetResponse:
+    copy_set = confirm_copy_set(session, owner_id=current_user.owner_id, copy_set_id=copy_set_id)
     return serialize_copy_set(copy_set)
 
 
@@ -158,9 +178,15 @@ def confirm_copy_set_endpoint(copy_set_id: str, session: Session = Depends(get_s
 def download_poster_endpoint(
     poster_id: str,
     variant: ImageVariantName = Query(default="original"),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> FileResponse:
-    poster = session.get(PosterVariant, poster_id)
+    poster = session.scalar(
+        select(PosterVariant).join(Product, PosterVariant.product_id == Product.id).where(
+            PosterVariant.id == poster_id,
+            Product.owner_id == current_user.owner_id,
+        )
+    )
     if poster is None:
         raise HTTPException(status_code=404, detail="海报不存在")
     storage = LocalStorage()
@@ -186,9 +212,15 @@ def download_poster_endpoint(
 def download_source_asset_endpoint(
     asset_id: str,
     variant: ImageVariantName = Query(default="original"),
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> FileResponse:
-    asset = session.get(SourceAsset, asset_id)
+    asset = session.scalar(
+        select(SourceAsset).join(Product, SourceAsset.product_id == Product.id).where(
+            SourceAsset.id == asset_id,
+            Product.owner_id == current_user.owner_id,
+        )
+    )
     if asset is None:
         raise HTTPException(status_code=404, detail="源图不存在")
     storage = LocalStorage()
@@ -209,15 +241,20 @@ def download_source_asset_endpoint(
 @router.delete("/source-assets/{asset_id}", response_model=ProductDetailResponse)
 def delete_source_asset_endpoint(
     asset_id: str,
+    current_user: CurrentUser = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ProductDetailResponse:
-    product = delete_reference_image(session, asset_id=asset_id)
+    product = delete_reference_image(session, owner_id=current_user.owner_id, asset_id=asset_id)
     return serialize_product_detail(product)
 
 
 @router.get("/products/{product_id}/history", response_model=ProductHistoryResponse)
-def get_product_history_endpoint(product_id: str, session: Session = Depends(get_session)) -> ProductHistoryResponse:
-    history = get_product_history(session, product_id)
+def get_product_history_endpoint(
+    product_id: str,
+    current_user: CurrentUser = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> ProductHistoryResponse:
+    history = get_product_history(session, product_id, current_user.owner_id)
     return ProductHistoryResponse(
         copy_sets=[serialize_copy_set(item) for item in history["copy_sets"]],
         poster_variants=[serialize_poster_variant(item) for item in history["poster_variants"]],
