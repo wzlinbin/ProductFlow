@@ -15,6 +15,12 @@ function valueText(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function balanceText(balance: Record<string, unknown> | undefined): string {
+  const remaining = balance?.remaining;
+  const numeric = typeof remaining === "number" ? remaining : Number(remaining);
+  return Number.isFinite(numeric) ? numeric.toFixed(2) : "—";
+}
+
 export function AccountPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -95,9 +101,12 @@ export function AccountPage() {
                 {balanceError}
               </div>
             ) : (
-              <pre className="max-h-72 overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
-                {JSON.stringify(balance ?? account?.balance ?? {}, null, 2)}
-              </pre>
+              <div className="rounded-xl bg-slate-50 px-4 py-5 dark:bg-slate-900/70">
+                <div className="text-sm text-slate-500 dark:text-slate-400">当前余额</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+                  {balanceText(balance ?? account?.balance)}
+                </div>
+              </div>
             )}
           </section>
         </div>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -17,8 +18,10 @@ from productflow_backend.config import (
     get_settings,
     normalize_config_values,
 )
+from productflow_backend.infrastructure.credential_vault import get_credential_vault
 from productflow_backend.infrastructure.db.models import (
     AppSetting,
+    AuthSession,
     ProviderBinding,
     ProviderProfile,
 )
@@ -70,7 +73,10 @@ def test_admin_access_can_be_disabled_and_re_enabled(configured_env: Path) -> No
 
     session_state = public_client.get("/api/auth/session")
     assert session_state.status_code == 200
-    assert session_state.json() == {"authenticated": True, "access_required": False}
+    session_payload = session_state.json()
+    assert session_payload["authenticated"] is True
+    assert session_payload["access_required"] is False
+    assert session_payload["is_admin"] is True
 
     disabled_login = public_client.post("/api/auth/session", json={"admin_key": ""})
     assert disabled_login.status_code == 200
@@ -99,10 +105,70 @@ def test_admin_access_can_be_disabled_and_re_enabled(configured_env: Path) -> No
 
     required_session = new_client.get("/api/auth/session")
     assert required_session.status_code == 200
-    assert required_session.json() == {"authenticated": False, "access_required": True}
+    required_payload = required_session.json()
+    assert required_payload["authenticated"] is False
+    assert required_payload["access_required"] is True
+    assert required_payload["is_admin"] is False
 
 
-def test_settings_api_requires_secondary_unlock(configured_env: Path) -> None:
+def test_account_balance_reads_sub2api_usage(configured_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from productflow_backend.infrastructure.sub2api_client import Sub2APIClient
+    from productflow_backend.presentation.api import create_app
+    from productflow_backend.presentation.deps import SESSION_COOKIE_NAME
+
+    async def fake_list_usage(self: Sub2APIClient, access_token: str, params: dict | None = None) -> dict:
+        assert access_token == "sub2api-access-token"
+        return {
+            "items": [
+                {
+                    "total_cost": 0.25,
+                    "actual_cost": 0.1,
+                    "user": {"balance": 12.5, "last_active_at": "2026-05-16T22:00:00+08:00"},
+                    "api_key": {"key": "sk-secret", "quota": 200, "quota_used": 3},
+                }
+            ],
+            "message": "ok",
+        }
+
+    monkeypatch.setenv("CREDENTIAL_VAULT_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+    get_settings.cache_clear()
+    get_credential_vault.cache_clear()
+    monkeypatch.setattr(Sub2APIClient, "list_usage", fake_list_usage)
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        auth_session = AuthSession(
+            id="usage-session",
+            owner_id="sub2api:1",
+            sub2api_user_id="1",
+            email="user@example.com",
+            username="user",
+            role="admin",
+            encrypted_access_token=get_credential_vault().encrypt("sub2api-access-token"),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        session.add(auth_session)
+        session.commit()
+
+    client = TestClient(create_app())
+    client.cookies.set(SESSION_COOKIE_NAME, "usage-session")
+    response = client.get("/api/account/balance")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "remaining": 12.5,
+        "message": "ok",
+        "usage": {
+            "request_count": 1,
+            "total_cost": 0.25,
+            "actual_cost": 0.1,
+            "api_key_quota": 200,
+            "api_key_quota_used": 3,
+            "last_active_at": "2026-05-16T22:00:00+08:00",
+        },
+    }
+
+
     from productflow_backend.presentation.api import create_app
 
     app = create_app()

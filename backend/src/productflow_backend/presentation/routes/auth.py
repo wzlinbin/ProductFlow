@@ -125,7 +125,8 @@ def create_admin_session(
     session: Session = Depends(get_session),
 ) -> AuthResult:
     settings = get_settings()
-    if get_runtime_settings().admin_access_required and (
+    runtime_settings = get_runtime_settings()
+    if runtime_settings.admin_access_required and (
         not settings.admin_access_key or not secrets.compare_digest(payload.admin_key, settings.admin_access_key)
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="管理员密钥不正确")
@@ -140,7 +141,11 @@ def create_admin_session(
         username="admin",
         role="admin",
         expires_at=now + timedelta(seconds=settings.sub2api_session_ttl_seconds),
-        settings_unlocked_at=existing_session.settings_unlocked_at if existing_session else None,
+        settings_unlocked_at=(
+            existing_session.settings_unlocked_at
+            if existing_session and not runtime_settings.admin_access_required
+            else None
+        ),
         last_seen_at=now,
         user_agent=request.headers.get("user-agent"),
         ip_address=_client_ip(request),
@@ -153,16 +158,27 @@ def create_admin_session(
 
 
 @router.get("/session")
-def get_session_state(request: Request, session: Session = Depends(get_session)) -> AuthSessionState | dict[str, bool]:
+def get_session_state(request: Request, session: Session = Depends(get_session)) -> AuthSessionState:
     settings = get_settings()
     if not get_runtime_settings().admin_access_required:
-        return {"authenticated": True, "access_required": False}
+        dev_user = CurrentUser(
+            session_id="dev-session",
+            owner_id="dev:admin",
+            sub2api_user_id="dev-admin",
+            email=None,
+            username="dev-admin",
+            role="admin",
+            credential_id=None,
+        )
+        state = _session_state(dev_user)
+        state.access_required = False
+        return state
     if not settings.admin_access_key or not request.cookies.get(SESSION_COOKIE_NAME):
-        return {"authenticated": False, "access_required": True}
+        return AuthSessionState(authenticated=False, access_required=True)
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     auth_session = session.get(AuthSession, session_id)
     if auth_session is None or as_utc(auth_session.expires_at) <= datetime.now(UTC):
-        return {"authenticated": False, "access_required": True}
+        return AuthSessionState(authenticated=False, access_required=True)
     return _session_state_from_auth_session(auth_session, auth_session.credential)
 
 

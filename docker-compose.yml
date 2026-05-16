@@ -44,6 +44,9 @@ services:
       ADMIN_ACCESS_KEY: ${ADMIN_ACCESS_KEY:?set ADMIN_ACCESS_KEY in .env}
       SETTINGS_ACCESS_TOKEN: ${SETTINGS_ACCESS_TOKEN:?set SETTINGS_ACCESS_TOKEN in .env}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      CREDENTIAL_VAULT_KEY: ${CREDENTIAL_VAULT_KEY:?set CREDENTIAL_VAULT_KEY in .env}
+      SUB2API_AUTH_BASE_URL: ${SUB2API_AUTH_BASE_URL:-}
+      SUB2API_PROVIDER_BASE_URL: ${SUB2API_PROVIDER_BASE_URL:-}
       DATABASE_URL: postgresql+psycopg://productflow:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@productflow-postgres:5432/productflow
       REDIS_URL: redis://productflow-redis:6379/0
       STORAGE_ROOT: /app/storage
@@ -110,6 +113,9 @@ services:
       ADMIN_ACCESS_KEY: ${ADMIN_ACCESS_KEY:?set ADMIN_ACCESS_KEY in .env}
       SETTINGS_ACCESS_TOKEN: ${SETTINGS_ACCESS_TOKEN:?set SETTINGS_ACCESS_TOKEN in .env}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      CREDENTIAL_VAULT_KEY: ${CREDENTIAL_VAULT_KEY:?set CREDENTIAL_VAULT_KEY in .env}
+      SUB2API_AUTH_BASE_URL: ${SUB2API_AUTH_BASE_URL:-}
+      SUB2API_PROVIDER_BASE_URL: ${SUB2API_PROVIDER_BASE_URL:-}
       DATABASE_URL: postgresql+psycopg://productflow:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@productflow-postgres:5432/productflow
       REDIS_URL: redis://productflow-redis:6379/0
       STORAGE_ROOT: /app/storage

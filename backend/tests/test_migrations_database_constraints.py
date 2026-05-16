@@ -74,10 +74,13 @@ def test_gallery_entry_model_matches_migration_contract() -> None:
     assert not table.c.created_at.nullable
     assert table.c.created_at.default is not None
     assert table.c.created_at.default.arg.__name__ == utcnow.__name__
+    assert table.c.owner_id.type.length == 120
+    assert not table.c.owner_id.nullable
     assert {index.name for index in table.indexes} == {
         "uq_image_gallery_entries_asset_id",
         "ix_image_gallery_entries_round_id",
         "ix_image_gallery_entries_created_at",
+        "ix_image_gallery_entries_owner_created",
     }
     foreign_keys = {fk.parent.name: fk for fk in table.foreign_keys}
     assert foreign_keys["image_session_asset_id"].constraint.name == "fk_image_gallery_entries_image_session_asset_id"
@@ -92,6 +95,8 @@ def test_user_canvas_template_model_matches_migration_contract() -> None:
     assert not table.c.id.nullable
     assert table.c.id.default is not None
     assert table.c.id.default.arg.__name__ == new_id.__name__
+    assert table.c.owner_id.type.length == 120
+    assert not table.c.owner_id.nullable
     assert table.c.key.type.length == 80
     assert not table.c.key.nullable
     assert table.c.title.type.length == 255
@@ -104,10 +109,11 @@ def test_user_canvas_template_model_matches_migration_contract() -> None:
     assert table.c.archived_at.nullable
     assert not table.c.created_at.nullable
     assert not table.c.updated_at.nullable
-    assert {constraint.name for constraint in table.constraints if isinstance(constraint, sa.UniqueConstraint)} == {
-        None
+    assert not {constraint.name for constraint in table.constraints if isinstance(constraint, sa.UniqueConstraint)}
+    assert {index.name for index in table.indexes} == {
+        "ix_user_canvas_templates_owner_archived",
+        "uq_user_canvas_templates_owner_key",
     }
-    assert {index.name for index in table.indexes} == {"ix_user_canvas_templates_archived_at"}
 
 
 def test_alembic_upgrade_head_supports_sqlite(tmp_path: Path, monkeypatch) -> None:
@@ -416,6 +422,7 @@ def test_user_canvas_template_migration_schema_and_downgrade_support_sqlite(tmp_
     assert "user_canvas_templates" in inspector.get_table_names()
     columns = {column["name"]: column for column in inspector.get_columns("user_canvas_templates")}
     assert columns["id"]["nullable"] is False
+    assert columns["owner_id"]["nullable"] is False
     assert columns["key"]["nullable"] is False
     assert columns["title"]["nullable"] is False
     assert columns["description"]["nullable"] is True
@@ -425,9 +432,11 @@ def test_user_canvas_template_migration_schema_and_downgrade_support_sqlite(tmp_
     assert columns["archived_at"]["nullable"] is True
     assert columns["created_at"]["nullable"] is False
     assert columns["updated_at"]["nullable"] is False
-    assert {constraint["name"] for constraint in inspector.get_unique_constraints("user_canvas_templates")} == {None}
+    assert not {constraint["name"] for constraint in inspector.get_unique_constraints("user_canvas_templates")}
     indexes = {index["name"]: index for index in inspector.get_indexes("user_canvas_templates")}
-    assert indexes["ix_user_canvas_templates_archived_at"]["column_names"] == ["archived_at"]
+    assert indexes["ix_user_canvas_templates_owner_archived"]["column_names"] == ["owner_id", "archived_at"]
+    assert bool(indexes["uq_user_canvas_templates_owner_key"]["unique"])
+    assert indexes["uq_user_canvas_templates_owner_key"]["column_names"] == ["owner_id", "key"]
 
     engine.dispose()
     command.downgrade(config, "20260507_0021")
@@ -458,6 +467,7 @@ def test_gallery_migration_schema_and_downgrade_support_sqlite(tmp_path: Path, m
     assert "image_gallery_entries" in inspector.get_table_names()
     columns = {column["name"]: column for column in inspector.get_columns("image_gallery_entries")}
     assert columns["id"]["nullable"] is False
+    assert columns["owner_id"]["nullable"] is False
     assert columns["image_session_asset_id"]["nullable"] is False
     assert columns["image_session_round_id"]["nullable"] is True
     assert columns["created_at"]["nullable"] is False
@@ -466,6 +476,7 @@ def test_gallery_migration_schema_and_downgrade_support_sqlite(tmp_path: Path, m
     assert indexes["uq_image_gallery_entries_asset_id"]["column_names"] == ["image_session_asset_id"]
     assert indexes["ix_image_gallery_entries_round_id"]["column_names"] == ["image_session_round_id"]
     assert indexes["ix_image_gallery_entries_created_at"]["column_names"] == ["created_at"]
+    assert indexes["ix_image_gallery_entries_owner_created"]["column_names"] == ["owner_id", "created_at"]
     foreign_keys = {tuple(fk["constrained_columns"]): fk for fk in inspector.get_foreign_keys("image_gallery_entries")}
     assert foreign_keys[("image_session_asset_id",)]["referred_table"] == "image_session_assets"
     assert foreign_keys[("image_session_asset_id",)]["options"]["ondelete"] == "CASCADE"
@@ -766,8 +777,8 @@ def test_disjoint_workflow_node_run_migration_constraints_support_sqlite(
     with engine.begin() as connection:
         connection.execute(
             sa.text(
-                "INSERT INTO workflow_runs (id, workflow_id, status, started_at) "
-                "VALUES ('run-2', 'workflow-1', 'running', :now)"
+                "INSERT INTO workflow_runs (id, workflow_id, owner_id, status, started_at) "
+                "VALUES ('run-2', 'workflow-1', 'dev:admin', 'running', :now)"
             ),
             {"now": now},
         )

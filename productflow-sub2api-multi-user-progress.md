@@ -4,15 +4,30 @@
 
 ## 当前结论
 
-改造尚未完成。核心开发已进入收尾阶段，但后端全量测试仍有 21 个失败，必须继续修复后才能认为达成 `productflow-sub2api-multi-user-plan.md` 的要求。
+改造后端部分已完成并通过全量测试，前端构建已通过。Docker Compose 生产栈已能启动并保持健康；真实 sub2api 地址已配置，生产链路已验证到登录、用户 API key、settings、图像会话创建和生成资产。
+
+最近一次生产栈验证结果：
+
+- `productflow-backend`：healthy，`GET /healthz` 返回 `{"status":"ok"}`
+- `productflow-web`：healthy，访问 Web 可进入已登录后的 `/products`
+- 未登录会话：`GET /api/auth/session` 返回 `{"authenticated":false,"access_required":true}`
+- sub2api 公共配置：`GET /api/auth/public-settings` 返回 200，`site_name` 为 `智惠 API (ZHAPI)`
+- 浏览器会话：`authenticated=true`，`owner_prefix=sub2api`，`api_key_source=sub2api`，`api_key_status=available`
+- 管理员兼容会话：`POST /api/auth/session`、`GET /api/auth/session`、`GET /api/account` 均返回 200
+- settings：管理员 session 可访问 `GET /api/settings/runtime`，真实浏览器会话已访问 settings/provider config 并更新 provider bindings
+- 图像生成：生产环境中存在 1 个 image session，包含 1 个 round、1 个顶层 asset、1 个 `generated_asset`，preview/thumbnail 下载均返回 200
 
 最近一次后端全量测试结果：
 
-- 240 passed
-- 21 failed
-- 10 warnings
-- 命令：`cmd //c "cd /d e:\个人项目\ProductFlow\backend && uv run pytest"`
-- 输出文件：`C:\Users\linb6\AppData\Local\Temp\claude\e-------ProductFlow\2d448c06-dee3-4b4c-b417-56db124cf523\tasks\bkrp4psm6.output`
+- 261 passed
+- 25 warnings
+- 命令：`cmd /c "cd /d "g:\我的项目\ProductFlow\backend" && uv run --extra dev pytest -q"`
+
+最近一次前端构建状态：
+
+- 依赖安装：已完成 `pnpm install`
+- 构建命令：`cmd /c "cd /d "g:\我的项目\ProductFlow\web" && npm run build"`
+- 结果：通过，`✓ built in 2.27s`
 
 ## 已完成的主要工作
 
@@ -111,24 +126,13 @@
 
 ## 当前剩余失败
 
-最近一次全量测试仍有 21 个失败：
+后端暂无剩余失败：
 
 ```text
-21 failed, 240 passed, 10 warnings
+261 passed, 25 warnings
 ```
 
-失败文件/用例包括：
-
-- `tests/test_auth_settings_runtime_config.py::test_settings_api_requires_secondary_unlock`
-- `tests/test_error_handling.py::test_update_copy_set_payload_validation_uses_typed_business_error`
-- `tests/test_gallery.py::test_gallery_save_handles_integrity_race`
-- `tests/test_image_generation_core.py::test_image_generation_core_normalizes_ids_tool_options_and_reference_payload`
-- `tests/test_migrations_database_constraints.py` 中 12 个迁移/模型契约相关失败
-- `tests/test_product_crud_jobs.py::test_reference_images_can_be_attached_to_product`
-- `tests/test_product_crud_jobs.py::test_product_status_filter_uses_database_pagination_before_eager_loading`
-- `tests/test_product_workflow_queue_recovery.py::test_workflow_run_kickoff_reuses_overlapping_active_node_runs`
-- `tests/test_provider_payloads.py::test_image_session_openai_responses_uses_explicit_branch_context`
-- `tests/test_provider_payloads.py::test_generated_poster_mode_uses_image_provider`
+前端最终构建已通过。
 
 ## 已知剩余根因
 
@@ -241,9 +245,16 @@ IndexError: list index out of range
 
 ## 当前 Todo 状态
 
-- 已完成：检查后端全量测试失败范围。
-- 进行中：修复多用户迁移导致的剩余后端失败。
-- 待办：后端全量通过后重新跑前端 build。
+- 已完成：修复 `credential_vault_key` 配置兼容。
+- 已完成：修复多用户迁移与模型契约测试。
+- 已完成：补应用层旧调用入口的 `dev:admin` 默认 owner。
+- 已完成：修复 settings 重新登录解锁状态兼容。
+- 已完成：修复管理员兼容路径下 mock/openai provider 任务凭据兼容。
+- 已完成：后端全量测试通过。
+- 已完成：前端 `npm run build` 通过。
+- 已完成：Docker Compose 生产栈接入真实 sub2api 地址并恢复 healthy。
+- 已完成：同步现有 PostgreSQL volume 用户密码到当前 `.env` 的 `POSTGRES_PASSWORD`，未删除数据卷。
+- 已完成：生产环境真实 sub2api 登录、用户 API key、settings、图像会话创建和生成资产验证。
 
 ## 重要安全约束
 
@@ -255,7 +266,8 @@ IndexError: list index out of range
 
 ## 接续提示
 
-下次继续开发时，优先从下面两个点开始：
+下次继续生产测试时，优先从下面三点开始：
 
-1. 修 `Settings.credential_vault_key` 的测试/迁移兼容，同时保持生产安全要求。
-2. 给剩余应用层直接调用入口补 `owner_id="dev:admin"` 默认值，然后重跑失败子集。
+1. 在生产 `.env` 或启动环境中提供真实 `SUB2API_AUTH_BASE_URL` 与 `SUB2API_PROVIDER_BASE_URL`。
+2. 用同一组稳定生产密钥重建/重启 backend 与 worker，确认 `docker compose config` 和健康检查通过。
+3. 继续验证真实用户注册/登录、2FA、账号页余额/用量、用户绑定 API key 生成、管理员 settings 权限隔离。

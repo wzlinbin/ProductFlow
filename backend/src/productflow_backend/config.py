@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -205,6 +206,22 @@ class Settings(BaseSettings):
     )
     admin_access_required: bool = True
     deletion_enabled: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_development_credential_vault_key(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or data.get("credential_vault_key"):
+            return data
+        app_env = str(data.get("app_env") or "development").strip().lower()
+        if app_env in {"prod", "production"}:
+            return data
+        session_secret = str(data.get("session_secret") or "")
+        if session_secret:
+            data = dict(data)
+            data["credential_vault_key"] = hashlib.sha256(
+                f"productflow-dev-credential-vault:{session_secret}".encode("utf-8")
+            ).hexdigest()
+        return data
 
     @field_validator("image_main_image_size", "image_promo_poster_size")
     @classmethod
@@ -657,11 +674,13 @@ def filter_image_tool_options(
 ) -> dict[str, Any] | None:
     if not tool_options:
         return None
-    resolved_allowed_fields = (
-        allowed_fields
-        if allowed_fields is not None
-        else parse_image_tool_allowed_fields(get_runtime_settings().image_tool_allowed_fields)
-    )
+    if allowed_fields is not None:
+        resolved_allowed_fields = allowed_fields
+    else:
+        try:
+            resolved_allowed_fields = parse_image_tool_allowed_fields(get_runtime_settings().image_tool_allowed_fields)
+        except ValidationError:
+            resolved_allowed_fields = DEFAULT_IMAGE_TOOL_ALLOWED_FIELDS
     selected_fields = set(resolved_allowed_fields)
     normalized = {
         str(key): value

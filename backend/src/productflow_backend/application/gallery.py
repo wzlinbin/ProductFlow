@@ -35,15 +35,14 @@ def _gallery_entry_query():
     )
 
 
-def list_gallery_entries(session: Session, *, owner_id: str) -> list[ImageGalleryEntry]:
+def list_gallery_entries(session: Session, *, owner_id: str = "dev:admin") -> list[ImageGalleryEntry]:
     return list(session.scalars(_gallery_entry_query().where(ImageGalleryEntry.owner_id == owner_id)).all())
 
 
 def _get_gallery_entry_by_asset_id(
     session: Session,
-    *,
-    owner_id: str,
     image_session_asset_id: str,
+    owner_id: str = "dev:admin",
 ) -> ImageGalleryEntry | None:
     return session.scalar(
         _gallery_entry_query().where(
@@ -53,8 +52,11 @@ def _get_gallery_entry_by_asset_id(
     )
 
 
-def save_generated_asset_to_gallery(session: Session, *, owner_id: str, image_session_asset_id: str) -> GallerySaveResult:
-    existing = _get_gallery_entry_by_asset_id(session, owner_id=owner_id, image_session_asset_id=image_session_asset_id)
+def save_generated_asset_to_gallery(session: Session, *, owner_id: str = "dev:admin", image_session_asset_id: str) -> GallerySaveResult:
+    if owner_id == "dev:admin":
+        existing = _get_gallery_entry_by_asset_id(session, image_session_asset_id)
+    else:
+        existing = _get_gallery_entry_by_asset_id(session, image_session_asset_id, owner_id)
     if existing is not None:
         return GallerySaveResult(entry=existing, created=False)
 
@@ -85,7 +87,10 @@ def save_generated_asset_to_gallery(session: Session, *, owner_id: str, image_se
         session.commit()
     except IntegrityError:
         session.rollback()
-        existing = _get_gallery_entry_by_asset_id(session, owner_id=owner_id, image_session_asset_id=image_session_asset_id)
+        if owner_id == "dev:admin":
+            existing = _get_gallery_entry_by_asset_id(session, image_session_asset_id)
+        else:
+            existing = _get_gallery_entry_by_asset_id(session, image_session_asset_id, owner_id)
         if existing is not None:
             return GallerySaveResult(entry=existing, created=False)
         raise

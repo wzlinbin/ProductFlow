@@ -488,7 +488,7 @@ def _image_provider_config_for_generation_task(session: Session, task: ImageSess
         return None
     base_config = resolve_image_provider_config()
     if not task.credential_id:
-        if base_config.provider_kind == "mock":
+        if base_config.provider_kind == "mock" or (task.owner_id == "dev:admin" and base_config.api_key):
             return base_config
         raise BusinessValidationError(TASK_KEY_EXPIRED_REASON)
     credential = session.scalar(

@@ -32,12 +32,14 @@ export function LoginPage({ authenticated }: LoginPageProps) {
   const publicSettings = publicSettingsQuery.data;
 
   useEffect(() => {
-    if (authenticated) {
+    const signedOut = window.sessionStorage.getItem("productflow:signed-out") === "1";
+    if (authenticated && !signedOut) {
       navigate("/products", { replace: true });
     }
   }, [authenticated, navigate]);
 
   const completeAuth = async () => {
+    window.sessionStorage.removeItem("productflow:signed-out");
     queryClient.removeQueries({ queryKey: ["settings-lock-state"] });
     queryClient.removeQueries({ queryKey: ["config"] });
     await queryClient.invalidateQueries({ queryKey: ["session"] });

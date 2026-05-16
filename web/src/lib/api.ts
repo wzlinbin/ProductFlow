@@ -135,8 +135,10 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
-  destroySession(): Promise<{ ok: boolean }> {
-    return request("/api/auth/session", { method: "DELETE" });
+  async destroySession(): Promise<{ ok: boolean }> {
+    const result = await request<{ ok: boolean }>("/api/auth/session", { method: "DELETE" });
+    window.sessionStorage.setItem("productflow:signed-out", "1");
+    return result;
   },
   getAccount(): Promise<AccountResponse> {
     return request("/api/account");

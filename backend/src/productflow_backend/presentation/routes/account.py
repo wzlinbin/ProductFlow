@@ -32,14 +32,12 @@ def get_account(current_user: CurrentUser = Depends(get_current_user)) -> dict[s
     }
 
 
-@router.get("/balance")
+@router.get("/account/balance")
 async def get_balance(
     current_user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),
     auth_client: Sub2APIClient = Depends(get_sub2api_client),
 ) -> dict[str, Any]:
-    if current_user.session_id == "dev-session":
-        return {"ok": False, "remaining": None, "message": "开发模式未连接 sub2api"}
     auth_session = session.get(AuthSession, current_user.session_id)
     if auth_session is None or not auth_session.encrypted_access_token:
         raise HTTPException(status_code=401, detail={"code": "SESSION_EXPIRED", "message": "登录已过期，请重新登录"})
@@ -59,13 +57,46 @@ async def get_balance(
 
 
 def _balance_summary(data: dict[str, Any]) -> dict[str, Any]:
+    items = data.get("items") if isinstance(data.get("items"), list) else []
+    first_item = items[0] if items and isinstance(items[0], dict) else {}
+    user = first_item.get("user") if isinstance(first_item.get("user"), dict) else {}
+    api_key = first_item.get("api_key") if isinstance(first_item.get("api_key"), dict) else {}
+
     remaining = data.get("remaining")
     if remaining is None:
         remaining = data.get("balance")
     if remaining is None and isinstance(data.get("summary"), dict):
         remaining = data["summary"].get("remaining") or data["summary"].get("balance")
+    if remaining is None:
+        remaining = user.get("balance")
+
     try:
         remaining_value = None if remaining is None else float(remaining)
     except (TypeError, ValueError):
         remaining_value = None
-    return {"ok": remaining_value is not None, "remaining": remaining_value, "message": data.get("message")}
+
+    return {
+        "ok": bool(data),
+        "remaining": remaining_value,
+        "message": data.get("message"),
+        "usage": {
+            "request_count": len(items),
+            "total_cost": _sum_usage_field(items, "total_cost"),
+            "actual_cost": _sum_usage_field(items, "actual_cost"),
+            "api_key_quota": api_key.get("quota"),
+            "api_key_quota_used": api_key.get("quota_used"),
+            "last_active_at": user.get("last_active_at"),
+        },
+    }
+
+
+def _sum_usage_field(items: list[Any], field: str) -> float:
+    total = 0.0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            total += float(item.get(field) or 0)
+        except (TypeError, ValueError):
+            continue
+    return total

@@ -183,9 +183,12 @@ cp .env.example .env
 - `ADMIN_ACCESS_KEY`：登录后台使用的管理员密钥；密钥本身只从环境变量读取，不写入数据库。
 - `SETTINGS_ACCESS_TOKEN`：配置页二次解锁令牌，必须与登录密钥分开。
 - `SESSION_SECRET`：签名 session cookie 的长随机字符串。
+- `CREDENTIAL_VAULT_KEY`：加密 sub2api access token、临时 token 和 API key 的稳定随机密钥，生产环境必须显式设置且后续升级保持不变。
 - `POSTGRES_PASSWORD`：PostgreSQL 密码；Compose 会用它拼出容器内的 `DATABASE_URL`。
+- `SUB2API_AUTH_BASE_URL`：sub2api 登录、注册、2FA 和 key 管理服务地址；真实多用户登录测试必须配置。
+- `SUB2API_PROVIDER_BASE_URL`：用户绑定 API key 调用的模型供应商兼容入口；真实用户生成测试必须配置。
 
-默认 provider 为 `mock`，`POSTER_GENERATION_MODE=template`，无需真实模型密钥即可完成创建商品、生成文案和模板海报等基础流程。真实模型配置见“模型与供应商配置”。
+默认 provider 为 `mock`，`POSTER_GENERATION_MODE=template`，无需真实模型密钥即可完成管理员兼容模式下的创建商品、生成文案和模板海报等基础流程。真实多用户登录和用户绑定生成依赖 sub2api 配置；真实模型配置见“模型与供应商配置”。
 
 ### 2. 一键构建并启动
 

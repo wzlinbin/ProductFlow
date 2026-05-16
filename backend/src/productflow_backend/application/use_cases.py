@@ -183,7 +183,7 @@ def create_product(
 def add_reference_images(
     session: Session,
     *,
-    owner_id: str,
+    owner_id: str = "dev:admin",
     product_id: str,
     reference_image_uploads: list[tuple[bytes, str, str]],
     storage: LocalStorage | None = None,
@@ -209,7 +209,7 @@ def add_reference_images(
 def delete_reference_image(
     session: Session,
     *,
-    owner_id: str,
+    owner_id: str = "dev:admin",
     asset_id: str,
     storage: LocalStorage | None = None,
 ) -> Product:
@@ -234,7 +234,7 @@ def delete_reference_image(
 def list_products(
     session: Session,
     *,
-    owner_id: str,
+    owner_id: str = "dev:admin",
     status: ProductWorkflowState | None,
     page: int,
     page_size: int,
@@ -254,14 +254,14 @@ def list_products(
     return list(products), total
 
 
-def get_product_detail(session: Session, product_id: str, owner_id: str) -> Product:
+def get_product_detail(session: Session, product_id: str, owner_id: str = "dev:admin") -> Product:
     return _get_product_or_raise(session, product_id, owner_id)
 
 
 def delete_product(
     session: Session,
     *,
-    owner_id: str,
+    owner_id: str = "dev:admin",
     product_id: str,
     storage: LocalStorage | None = None,
 ) -> None:
@@ -285,7 +285,7 @@ def delete_product(
 def update_copy_set(
     session: Session,
     *,
-    owner_id: str,
+    owner_id: str = "dev:admin",
     copy_set_id: str,
     structured_payload: dict[str, Any],
 ) -> CopySet:
@@ -301,7 +301,7 @@ def update_copy_set(
     return copy_set
 
 
-def confirm_copy_set(session: Session, *, owner_id: str, copy_set_id: str) -> CopySet:
+def confirm_copy_set(session: Session, *, owner_id: str = "dev:admin", copy_set_id: str) -> CopySet:
     copy_set = _get_copy_set_or_raise(session, copy_set_id, owner_id)
     product = _get_product_or_raise(session, copy_set.product_id, owner_id)
     copy_set.status = CopyStatus.CONFIRMED
@@ -312,7 +312,7 @@ def confirm_copy_set(session: Session, *, owner_id: str, copy_set_id: str) -> Co
     return copy_set
 
 
-def get_product_history(session: Session, product_id: str, owner_id: str) -> dict[str, Any]:
+def get_product_history(session: Session, product_id: str, owner_id: str = "dev:admin") -> dict[str, Any]:
     product = _get_product_or_raise(session, product_id, owner_id)
     return {
         "copy_sets": sorted(product.copy_sets, key=lambda item: item.created_at, reverse=True),
