@@ -9,7 +9,7 @@
 已完成的基础能力：
 
 - FastAPI 后端、React/Vite 前端、PostgreSQL、Redis、Dramatiq worker。
-- 单管理员登录和私有工作台。
+- sub2api 登录、注册、2FA、本地 HttpOnly Cookie session、用户 owner 隔离和管理员兼容会话。
 - 商品创建、图片上传、参考图管理。
 - 文案生成、编辑、确认和历史记录。
 - 模板海报生成、AI 图片 provider 海报生成、海报下载。
@@ -24,7 +24,7 @@
 - 产品内帮助页：`/help` 覆盖快速开始、画布操作、模板、运行失败处理、支持边界和常见问题。
 - 提示词配置：商品理解、文案、工作台生图和连续生图模板可在设置页覆盖。
 - 初版产品品牌资产、README 展示图和 Web favicon/metadata。
-- 设置页管理 provider、模型、上传限制、任务重试等业务配置。
+- 设置页管理 provider、模型、上传限制、任务重试等业务配置，并保持管理员专用与二次解锁。
 - 运行中轻量状态轮询：连续生图和商品工作流运行时只轮询 status 响应，完成后再刷新完整详情。
 - 移动端连续生图页面适配：顶部操作、状态、预览、设置、参考图和参数区按移动端单栏组织。
 - Docker Compose 一键自托管路径：`docker compose up -d --build` 可启动 PostgreSQL、Redis、后端 API、Dramatiq worker 和 Web 静态站点；`just release` 已切到 Compose 生产更新和健康检查链路。
@@ -43,7 +43,7 @@
 - 扩展商品工作流 DAG 的端到端测试样例。
 - 扩展前端 Vitest 覆盖，从当前 helper/canvas/cache 测试推进到关键组件交互。
 - 为 provider mock、OpenAI Responses provider、失败分类和手动重试/取消补更多边界测试。
-- 为设置页 secret 更新和不回显行为补独立测试。
+- 为设置页 secret 更新、不回显行为、普通用户访问 settings 拒绝和管理员二次解锁补独立测试。
 
 ### 3. 工作流体验
 
@@ -91,7 +91,7 @@
 
 ## 暂不计划
 
-- 内置托管账号或代管模型密钥。
+- 内置托管账号、代管模型密钥或替代 sub2api 的本地账号体系。
 - 内置支付计费。
-- 默认公开注册。
+- 绕过 sub2api 公共配置的默认公开注册。
 - 无人工确认的全自动投放链路。

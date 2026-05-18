@@ -16,13 +16,13 @@ It is not a hosted SaaS product, not a multi-tenant open platform, and does not 
 - Teams that want to self-host model keys, databases, and asset files.
 - Developers who want to extend AI ecommerce creative workflows.
 
-Non-target users: teams that need multi-tenant isolation, complex RBAC, payment settlement, asset placement platforms, or hosted account systems.
+Non-target users: teams that need complex RBAC, team audit, built-in payment settlement, asset placement platforms, hosted account systems, or a product that does not depend on sub2api as the source of truth for identity and billing.
 
 ## 3. Current Core Scenarios
 
 ### 3.1 Product Creative Chain
 
-1. Log in with an admin key.
+1. Log in or register with a sub2api account, completing 2FA when required.
 2. Create a product, upload the product source image, fill in the product name, and choose a blank canvas or ecommerce scenario template.
 3. Enter the product workbench and add category, price, product notes, and generation direction.
 4. Use copy nodes to generate and edit structured copy; later image generation reads the structured copy context directly.
@@ -74,25 +74,27 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 - `ProductWorkflow` / `WorkflowNode` / `WorkflowEdge` / `WorkflowRun`: product DAG workflow structure and run records.
 - `CanvasTemplate` / `UserCanvasTemplate`: built-in full scenario templates and user-saved node-group templates.
 - `AppSetting`: runtime business configuration override.
+- `AuthSession` / `AuthLoginChallenge` / `UserProviderCredential`: local sessions, temporary 2FA challenges, and server-encrypted user provider credentials.
 
 ## 5. Current Pages
 
 Implemented frontend pages:
 
-- `/login`: admin-key login.
+- `/login`: sub2api email/password login, registration, and 2FA.
 - `/products`: product list.
 - `/products/new`: create product.
 - `/products/:productId`: product detail, copy/poster main chain, history, and DAG workflow.
 - `/gallery`: generated image gallery.
 - `/help`: in-product help page.
-- `/settings`: provider, model, upload limit, job retry, and other business configuration.
+- `/account`: sub2api user information, API key status, balance, and usage.
+- `/settings`: admin-only provider, model, upload limit, job retry, and other business configuration.
 - `/image-chat` and `/products/:productId/image-chat`: iterative image generation and attaching assets back to products.
 
 ## 6. V1 Implemented Acceptance Surface
 
 For a single self-hosted deployment, the current version should be able to:
 
-1. Run the product chain with local `mock` providers without external model keys.
+1. Complete the main login/registration/2FA path with a sub2api account, and run the product chain with local `mock` providers without external model keys.
 2. Store products, assets, copy, posters, tasks, image sessions, and workflow state in PostgreSQL.
 3. Use Redis + Dramatiq to execute async copy/poster jobs and product workflows.
 4. Use durable `ImageSessionGenerationTask` records for iterative image generation, including queue position, failure reason, and completion refresh.
@@ -101,7 +103,7 @@ For a single self-hosted deployment, the current version should be able to:
 7. Refresh running tasks/workflows through lightweight status APIs instead of high-frequency full-object polling.
 8. Retry recoverable iterative image tasks and product workflow runs, and cancel running tasks.
 9. Save iterative generated images to the gallery and retrieve originals through controlled download APIs.
-10. Save business configuration overrides through `/settings` while avoiding secret values in API responses.
+10. Save business configuration overrides through admin-only `/settings` while avoiding secret values in API responses.
 11. Store uploaded/generated files in local storage and read them through controlled download APIs.
 12. Read in-product operation guidance and support boundaries at `/help`.
 
@@ -109,8 +111,8 @@ For a single self-hosted deployment, the current version should be able to:
 
 Currently not included:
 
-- Multi-user, multi-tenant, team permissions, or audit admin.
-- Hosted model keys, cloud account systems, or billing systems.
+- Team permissions, complex RBAC, or audit admin.
+- A local account system that replaces sub2api, hosted model keys, or built-in billing systems.
 - Automatic placement, automatic listing, or store authorization.
 - Video generation workflows.
 - Kubernetes / Helm / released container images or other production orchestration packages. The repository already includes a Docker Compose self-hosting path.

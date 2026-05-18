@@ -134,114 +134,23 @@
 
 前端最终构建已通过。
 
-## 已知剩余根因
+## 已关闭的历史阻塞
 
-### 1. `credential_vault_key` 在部分迁移测试环境中缺失
+以下问题曾在多用户改造中阻塞测试或生产验证，当前均已关闭：
 
-多个 Alembic 迁移测试只设置了旧配置：
-
-- `ADMIN_ACCESS_KEY`
-- `SESSION_SECRET`
-- `DATABASE_URL`
-- `REDIS_URL`
-- `STORAGE_ROOT`
-
-但没有设置：
-
-- `CREDENTIAL_VAULT_KEY`
-
-导致 `Settings` 初始化失败：
-
-```text
-ValidationError: credential_vault_key Field required
-```
-
-下次优先处理方式：
-
-- 给 `credential_vault_key` 提供兼容默认值，或
-- 在配置层从 `session_secret` 派生开发/测试默认值，生产环境仍要求显式配置。
-
-需要注意安全约束：生产环境不能静默使用弱默认密钥。
-
-### 2. 应用层旧函数签名仍未完全兼容
-
-仍有旧测试直接调用应用层函数，但新签名要求 `owner_id`。
-
-需要继续补默认 `dev:admin` 的函数包括：
-
-- `add_reference_images`
-- `list_products`
-- `delete_product`
-- `get_product_detail`
-- 可能还有 `update_copy_set` / `confirm_copy_set` / `get_product_history` 等。
-
-原则：
-
-- 路由层继续显式传 `current_user.owner_id`，保证真实多用户隔离。
-- 仅应用层直接调用保留默认 owner，兼容旧单用户测试。
-
-### 3. Gallery 保存竞态测试还有签名/owner 兼容问题
-
-失败用例：
-
-- `test_gallery_save_handles_integrity_race`
-
-需要检查 `save_generated_asset_to_gallery` 是否仍要求显式 owner，或竞态分支 re-query 时 owner 条件导致旧测试不匹配。
-
-### 4. OpenAI Responses 显式分支上下文测试没有立即生成 rounds
-
-失败用例：
-
-- `test_image_session_openai_responses_uses_explicit_branch_context`
-
-现象：
-
-```text
-first.json()["rounds"][-1]
-IndexError: list index out of range
-```
-
-可能原因：
-
-- 现在 HTTP generate route 走 durable task，只返回 queued session，不同步执行生成。
-- 旧测试期望 route 返回时 rounds 已生成。
-
-需要判断是：
-
-- 在测试/mock/同步场景恢复旧同步行为，还是
-- 调整任务队列执行触发逻辑让测试中的 monkeypatch 路径能同步完成。
-
-### 5. 迁移契约测试需要细查
-
-迁移相关共有 12 个失败，大部分目前被 `credential_vault_key` 缺失挡住；修复配置后可能暴露真实迁移结构问题。
-
-重点检查：
-
-- `20260515_0029_add_sub2api_multi_user_foundation.py`
-- `owner_id` 新列是否和旧 SQLite 迁移兼容。
-- 新增索引是否在 downgrade 时完整删除。
-- 模型字段与迁移契约是否一致。
+- `credential_vault_key` 配置兼容：测试/开发环境可启动，生产仍要求显式、安全、稳定的密钥。
+- 多用户迁移与模型契约：迁移测试已恢复通过。
+- 应用层旧调用入口的 `dev:admin` 默认 owner：兼容旧测试，路由层仍显式传 `current_user.owner_id` 保证真实多用户隔离。
+- Gallery 保存竞态测试的 owner 兼容问题。
+- OpenAI Responses 显式分支上下文测试与 durable task 行为差异。
+- 管理员兼容路径下 mock/openai provider 任务凭据兼容。
 
 ## 下次建议接续步骤
 
-1. 先修 `credential_vault_key` 配置兼容。
-2. 跑迁移测试子集：
-   - `cmd //c "cd /d e:\个人项目\ProductFlow\backend && uv run pytest tests/test_migrations_database_constraints.py -q"`
-3. 修应用层旧签名兼容：
-   - `add_reference_images`
-   - `list_products`
-   - `delete_product`
-   - `get_product_detail`
-   - 相关 copy/history 函数视失败继续补。
-4. 跑业务失败子集：
-   - `test_product_crud_jobs.py`
-   - `test_error_handling.py`
-   - `test_gallery.py`
-5. 处理 `test_provider_payloads.py::test_image_session_openai_responses_uses_explicit_branch_context` 的同步/异步行为差异。
-6. 再跑后端全量测试。
-7. 后端全量通过后，跑前端构建：
-   - `cmd //c "cd /d e:\个人项目\ProductFlow\web && npm run build"`
-8. 若继续修改 UI，最后需要启动前端并手动验证登录、账号页、管理员 settings、普通用户隐藏 settings 等路径。
+1. 继续生产环境真实用户路径验证：注册、登录、2FA、账号页余额/用量、用户绑定 API key 生成。
+2. 继续验证权限隔离：普通用户隐藏并拒绝访问 settings，管理员 settings 仍需二次解锁，跨 owner 数据访问返回未找到。
+3. 如修改 UI，最后需要启动前端并手动验证登录、账号页、管理员 settings、普通用户隐藏 settings 等路径。
+4. 在继续功能开发前，优先补普通用户 settings 拒绝、管理员二次解锁、账号页余额/用量和用户 API key 状态的前端/后端回归覆盖。
 
 ## 当前 Todo 状态
 

@@ -83,11 +83,11 @@ Frontend quality entrypoints from `web/package.json`:
 
 `README.md`, `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/USER_GUIDE.md` now cover the current mainline:
 
-- Single-admin self-hosting, not multi-tenant SaaS.
-- ProductFlow workbench, iterative image generation, gallery, settings page, and runtime configuration.
+- sub2api user login/registration/2FA, owner isolation, and an admin-compatible session path, not a full multi-tenant SaaS.
+- ProductFlow workbench, iterative image generation, gallery, account page, admin settings page, and runtime configuration.
 - Async execution and lightweight status polling.
 - Docker Compose self-hosting path and local development path.
-- Current explicit exclusions: multi-tenancy, payments, automatic placement, object storage, Helm, or released container images.
+- Current explicit exclusions: team permissions, complex RBAC, built-in payments, automatic placement, object storage, Helm, released container images, or a local account/billing system that replaces sub2api.
 
 The historical backend audit checklist and historical architecture review snapshot were removed so old line counts, old test entrypoints, and old issue tables do not keep being read as current facts.
 
@@ -165,11 +165,11 @@ Any future background task should reuse these principles and include tests for q
 
 The Docker Compose self-hosted path is available, but ProductFlow is still not a full production platform:
 
-- It is not a multi-user or multi-tenant system.
+- Multi-user capability depends on external sub2api; ProductFlow itself is not a full multi-tenant SaaS.
 - There is no object-storage adapter layer; storage is currently local filesystem storage.
 - There is no SSE/WebSocket push; running state depends on polling.
 - There is no Helm chart or released container image; the current path builds from the repository through Compose.
-- There is no audit admin, object-level permission model, payment system, or hosted account system.
+- There are no team permissions, complex RBAC, audit admin, built-in payments, or hosted account system that replaces sub2api.
 
 These are not current implementation defects, but docs and the roadmap must keep marking them as unimplemented or future directions to avoid misleading deployment expectations.
 
@@ -186,7 +186,7 @@ Provider calls are isolated in the infrastructure layer, but failure classificat
    Every new background task should answer: when DB state lands, how enqueue failure is written back, how worker duplicate messages no-op, which states API startup recovers, and whether the status endpoint is lightweight.
 
 3. **Keep docs split between current facts and future plans**  
-   Current facts belong in README, PRD, ARCHITECTURE, USER_GUIDE, and this review. Object storage, SSE/WebSocket, Helm, multi-tenancy, and similar items should stay in roadmap future directions or out-of-scope sections unless implemented.
+   Current facts belong in README, PRD, ARCHITECTURE, USER_GUIDE, and this review. Object storage, SSE/WebSocket, Helm, team permissions, complex RBAC, and similar items should stay in roadmap future directions or out-of-scope sections unless implemented.
 
 4. **Keep splitting by real hotspots, not global rewrites**  
    The ProductWorkflow and ProductDetail split direction has worked. Future splits should follow real modification hotspots from new features, avoiding repository, domain service, or complex frontend state layers introduced only for architecture completeness.

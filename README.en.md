@@ -11,13 +11,13 @@
 
 ProductFlow is an open-source, self-hosted product creative workspace for solo merchants and small teams. Its core flow covers product information, reference images, AI copywriting, AI/template posters, iterative image sessions, a generated image gallery, and a visual workflow.
 
-The current form is a private single-admin instance. A self-hosted deployment requires PostgreSQL, Redis, the backend API, Dramatiq worker, Web frontend, and usable text/image model providers.
+The current main path uses sub2api login, registration, and 2FA. Browsers only hold an HttpOnly Cookie session, and business data is isolated by user owner. The project still keeps an admin-compatible session path for local development, legacy tests, and settings management; a self-hosted deployment requires PostgreSQL, Redis, the backend API, Dramatiq worker, Web frontend, sub2api, and usable text/image model providers.
 
 ## Feature Overview
 
 ### Products / Workbench
 
-- Single-admin access-key login with Cookie session access to backend APIs.
+- sub2api email/password login, registration, and 2FA with HttpOnly Cookie session access to backend APIs.
 - Product list, paginated browsing, product creation, product detail workbench, and product deletion protected by a global switch.
 - Node canvas for product information, reference images, copy nodes, and image-generation nodes.
 - Canvas interactions: mouse-wheel zoom, drag panning on blank canvas, node dragging, node connections, edge deletion, Ctrl/Cmd/Shift multi-select, and Shift box selection.
@@ -67,7 +67,7 @@ The current form is a private single-admin instance. A self-hosted deployment re
 
 ## Current Boundaries
 
-ProductFlow does not currently provide multi-user/multi-tenant support, team permissions, payments, hosted account systems, automatic ad placement/listing, video generation, Kubernetes/Helm/released container images, or other production orchestration packages. The in-repository Docker Compose self-hosting path is available.
+Current multi-user capability depends on external sub2api as the source of truth for identity, registration, 2FA, balance/usage, and user API keys. ProductFlow does not include a hosted account system or local billing. It does not currently provide team permissions, complex RBAC, automatic ad placement/listing, video generation, Kubernetes/Helm/released container images, or other production orchestration packages. The in-repository Docker Compose self-hosting path is available.
 
 ## Product Entry Points and Docs
 
@@ -184,12 +184,15 @@ cp .env.example .env
 
 At minimum, change these values:
 
-- `ADMIN_ACCESS_KEY`: admin key used to log in to the backend UI.
-- `SETTINGS_ACCESS_TOKEN`: secondary unlock token for the settings page; it must be different from the login key.
+- `ADMIN_ACCESS_KEY`: key for the admin-compatible session and local development entrypoint.
+- `SETTINGS_ACCESS_TOKEN`: secondary unlock token for the settings page; it must be different from the admin-compatible key.
 - `SESSION_SECRET`: long random string used to sign session cookies.
+- `CREDENTIAL_VAULT_KEY`: stable random key used to encrypt sub2api access tokens, temporary tokens, and API keys; production must set it explicitly and keep it stable across upgrades.
 - `POSTGRES_PASSWORD`: PostgreSQL password; Compose uses it to build the in-container `DATABASE_URL`.
+- `SUB2API_AUTH_BASE_URL`: sub2api login, registration, 2FA, and key-management service URL; required for real user login.
+- `SUB2API_PROVIDER_BASE_URL`: OpenAI-compatible provider entrypoint used with user-bound API keys; required for real user generation.
 
-The default provider is `mock`, and `POSTER_GENERATION_MODE=template`, so you can complete basic flows such as creating products, generating copy, and rendering template posters without real model keys. Read "Model and Provider Configuration" before switching to real models.
+The default provider is `mock`, and `POSTER_GENERATION_MODE=template`, so you can complete basic admin-compatible flows such as creating products, generating copy, and rendering template posters without real model keys. Real user login, registration, account pages, and user-bound generation depend on sub2api configuration. Read "Model and Provider Configuration" before switching to real models.
 
 ### 2. Build and start everything
 
@@ -264,7 +267,7 @@ Expected API response:
 {"status":"ok"}
 ```
 
-Default Web entrypoint: `http://127.0.0.1:29281` (or the `WEB_PORT` from `.env` if changed). Log in with `ADMIN_ACCESS_KEY` from `.env`. The Web image serves Vite-built static assets through nginx, and nginx reverse-proxies same-origin `/api/*` requests to `productflow-backend:29280`.
+Default Web entrypoint: `http://127.0.0.1:29281` (or the `WEB_PORT` from `.env` if changed). After configuring sub2api, log in or register with a sub2api email/password account and complete 2FA when required; without real sub2api, use the admin-compatible path for development and mock-provider verification. The Web image serves Vite-built static assets through nginx, and nginx reverse-proxies same-origin `/api/*` requests to `productflow-backend:29280`.
 
 ### 5. Logs, stop, and cleanup
 
@@ -304,9 +307,10 @@ cp web/.env.example web/.env
 
 The `DATABASE_URL` / `REDIS_URL` in `.env.example` target the Compose container network. Local hot-reload development commands use `.env.dev` to connect through host `localhost:${POSTGRES_HOST_PORT:-15432}` and `localhost:${REDIS_HOST_PORT:-16379}`. At minimum, change these values in `.env` / `.env.dev` to your own random values:
 
-- `ADMIN_ACCESS_KEY`: admin key used to log in to the backend UI.
-- `SETTINGS_ACCESS_TOKEN`: secondary unlock token for the settings page; it must be different from the login key.
+- `ADMIN_ACCESS_KEY`: key for the admin-compatible session and local development entrypoint.
+- `SETTINGS_ACCESS_TOKEN`: secondary unlock token for the settings page; it must be different from the admin-compatible key.
 - `SESSION_SECRET`: long random string used to sign session cookies.
+- `CREDENTIAL_VAULT_KEY`: stable random key used to encrypt sub2api access tokens, temporary tokens, and API keys.
 - `POSTGRES_PASSWORD`: local PostgreSQL password; keep it consistent with the password in `.env.dev`'s `DATABASE_URL`.
 
 `.env.dev.example` uses development ports, Redis DB 1, and `backend/storage-dev`. The database name matches the default `docker-compose.yml`. If you use a separate development database, create it in PostgreSQL first, then adjust `.env.dev`'s `DATABASE_URL`. Local development storage is isolated from production Compose storage: `just backend-run` / `just backend-worker` and their raw equivalents read `STORAGE_ROOT=./backend/storage-dev` from `.env.dev`. Do not start local development processes by shell-sourcing production `.env` or importing production `STORAGE_HOST_PATH`.
@@ -360,7 +364,7 @@ Default development ports come from `.env.dev.example`:
 - API: `http://localhost:29282`
 - Web: `http://localhost:29283`
 
-Open the Web page and log in with `ADMIN_ACCESS_KEY`. The top navigation provides **Products / Workbench**, **Image chat**, **Gallery**, **Help**, and **Settings**.
+Open the Web page and log in with a sub2api account; without real sub2api, use the admin-compatible path to verify local mock flows. The top navigation provides **Products / Workbench**, **Image chat**, **Gallery**, **Help**, **Account**, and admin-visible **Settings**.
 
 ### 6. Development health check
 
@@ -376,9 +380,9 @@ Expected response:
 
 ## Model and Provider Configuration
 
-ProductFlow configures text and image capabilities separately. Infrastructure configuration (database, Redis, session, admin key) is still read only from environment variables. Business configuration can be written to the database from the frontend `/settings` page and override environment defaults.
+ProductFlow configures text and image capabilities separately. Infrastructure configuration (database, Redis, session, sub2api URLs, credential encryption key, admin-compatible key) is still read only from environment variables. Business configuration can be written to the database from the frontend `/settings` page and override environment defaults.
 
-The login gate `admin_access_required` is enabled by default: normal workspace pages and private APIs require login with `ADMIN_ACCESS_KEY` first. Administrators can disable this gate after the secondary `/settings` unlock, allowing the ordinary workspace/API to be used without the admin key. `ADMIN_ACCESS_KEY` still must remain in the environment for future re-enabling, and `SETTINGS_ACCESS_TOKEN` always protects settings reads and writes independently.
+The login gate `admin_access_required` is enabled by default: normal workspace pages and private APIs require a valid `productflow_session`. The main path creates user sessions through sub2api login/registration/2FA, while the admin-compatible endpoint remains for local development, legacy tests, and controlled management scenarios. Administrators can disable this gate after the secondary `/settings` unlock, allowing the ordinary workspace/API to use the `dev:admin` compatibility session. `SETTINGS_ACCESS_TOKEN` always protects settings reads and writes independently.
 
 Business hard deletion is disabled by default: when `DELETION_ENABLED=false`, product deletion and iterative image-session deletion APIs return 403 so demo sites can preserve evidence for policy review. Workflow node/edge editing and reference-image deletion are not affected. To remove whole products or sessions, an administrator can explicitly enable "business deletion" in `/settings`, or enable the environment default.
 

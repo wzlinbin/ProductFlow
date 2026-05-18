@@ -184,12 +184,12 @@ Both modes target two artifact types:
 
 Configuration is split into two categories:
 
-1. Env-only infrastructure configuration: `DATABASE_URL`, `REDIS_URL`, `SESSION_SECRET`, `ADMIN_ACCESS_KEY`, `SETTINGS_ACCESS_TOKEN`, and similar values. These must be available before the application can access the database, or they protect the secondary unlock for the settings page, so runtime DB overrides are not supported.
-2. Runtime business configuration: provider, model, image size, upload limits, task retry, global generation concurrency limit, poster mode, prompt templates, login-gate switch, business deletion switch, and similar values. They can be provided as defaults by `.env` / `.env.dev`, or written to `app_settings` through `/api/settings` after login and settings-page unlock.
+1. Env-only infrastructure configuration: `DATABASE_URL`, `REDIS_URL`, `SESSION_SECRET`, `CREDENTIAL_VAULT_KEY`, `SUB2API_AUTH_BASE_URL`, `SUB2API_PROVIDER_BASE_URL`, `ADMIN_ACCESS_KEY`, `SETTINGS_ACCESS_TOKEN`, and similar values. These must be available before the application can access the database, or they protect credentials, the admin-compatible entrypoint, and the settings-page secondary unlock, so runtime DB overrides are not supported.
+2. Runtime business configuration: provider, model, image size, upload limits, task retry, global generation concurrency limit, poster mode, prompt templates, login-gate switch, business deletion switch, and similar values. They can be provided as defaults by `.env` / `.env.dev`, or written to `app_settings` through `/api/settings` after administrator login and settings-page unlock.
 
 Secret configuration values are not echoed back in API responses.
 
-The login gate `admin_access_required` is enabled by default. When enabled, private APIs require an admin marker in the Cookie session through `require_admin`, and invalid `ADMIN_ACCESS_KEY` values still return 401. When disabled, normal workspace/private APIs can be used without the admin key, and `GET /api/auth/session` returns `authenticated=true` and `access_required=false`; complete `/api/settings` reads/writes still require the independent `SETTINGS_ACCESS_TOKEN` unlock.
+The login gate `admin_access_required` is enabled by default. When enabled, private APIs require a valid `productflow_session` through `require_user`; the main path creates sessions through sub2api login/registration/2FA, while the admin-compatible endpoint still validates `ADMIN_ACCESS_KEY`. When disabled, normal workspace/private APIs use the `dev:admin` compatibility session, and `GET /api/auth/session` returns `authenticated=true` and `access_required=false`; complete `/api/settings` reads/writes still require an administrator session and the independent `SETTINGS_ACCESS_TOKEN` unlock.
 
 The business deletion switch `deletion_enabled` is disabled by default. When disabled, the backend rejects whole-product deletion and whole iterative image-session deletion at the route boundary, so demo sites do not lose evidence after problematic content is deleted. Workflow node/edge editing and reference-image deletion are not affected. `DELETE /api/auth/session` and restoring database overrides from the settings page are not part of business deletion protection.
 
@@ -209,14 +209,16 @@ Do not bypass the storage service by directly concatenating user-controlled path
 
 ## 10. Security Boundaries
 
-The current security model is "single-admin self-hosted":
+The current security model is "sub2api identity + self-hosted business data":
 
-- Admin-key login, not public registration.
-- `ADMIN_ACCESS_KEY` is read only from environment variables and does not enter database configuration. The login gate can be disabled through the `admin_access_required` runtime switch, but stays enabled by default.
-- The settings page uses an independent `SETTINGS_ACCESS_TOKEN` for secondary unlock; the session stores only the unlocked marker, not the plaintext token. Disabling the login gate does not disable this secondary unlock.
-- Session cookies are signed with `SESSION_SECRET`.
+- Login, registration, 2FA, balance/usage, and user API keys use sub2api as the source of truth; ProductFlow stores only local HttpOnly Cookie sessions and server-encrypted sub2api tokens/keys.
+- Business data is isolated by `owner_id`; cross-user access is handled as not found to avoid disclosing resource existence.
+- `ADMIN_ACCESS_KEY` is read only from environment variables and does not enter database configuration. It is only used for the admin-compatible session, local development, and legacy tests. The login gate can be disabled through the `admin_access_required` runtime switch, but stays enabled by default.
+- The settings page requires administrator privileges and an independent `SETTINGS_ACCESS_TOKEN` secondary unlock; the session stores only the unlock time, not the plaintext token. Disabling the login gate does not disable this secondary unlock.
+- `CREDENTIAL_VAULT_KEY` encrypts sub2api access tokens, 2FA temporary tokens, and user API keys; production must set it explicitly and keep it stable.
+- Session cookies are protected with `SESSION_SECRET`, and the authentication cookie is named `productflow_session`.
 - CORS is controlled by `BACKEND_CORS_ORIGINS`.
 - Uploaded files have MIME, size, pixel, and count limits.
-- Provider API keys are stored in env or database configuration, and APIs do not echo secrets.
+- Provider/API keys are not echoed by APIs; real user generation prefers the user's bound sub2api credential.
 
-Currently not provided: multi-user isolation, object-level permissions, audit logs, or production WAF configuration.
+Currently not provided: team permissions, complex RBAC, audit admin, production WAF configuration, or a local account/billing system that replaces sub2api.

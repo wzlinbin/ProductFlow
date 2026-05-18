@@ -9,7 +9,7 @@ This roadmap describes the evolution direction of the open-source self-hosted ve
 Completed baseline capabilities:
 
 - FastAPI backend, React/Vite frontend, PostgreSQL, Redis, and Dramatiq worker.
-- Single-admin login and private workspace.
+- sub2api login, registration, 2FA, local HttpOnly Cookie sessions, user-owner isolation, and an admin-compatible session path.
 - Product creation, image upload, and reference image management.
 - Copy generation, editing, confirmation, and history.
 - Template poster generation, AI image-provider poster generation, and poster download.
@@ -24,7 +24,7 @@ Completed baseline capabilities:
 - In-product help page: `/help` covers quick start, canvas operations, templates, run failure handling, supported operations, and common questions.
 - Prompt configuration: product understanding, copy, workbench image generation, and iterative image-generation templates can be overridden in the settings page.
 - Initial product brand assets, README preview images, and Web favicon/metadata.
-- Settings page management for providers, models, upload limits, job retry, and other business configuration.
+- Settings page management for providers, models, upload limits, job retry, and other business configuration, kept admin-only with secondary unlock.
 - Lightweight status polling while running: iterative image generation and product workflows poll status responses only, then refresh full details after completion.
 - Mobile iterative image page adaptation: top actions, status, preview, settings, reference images, and parameters are organized as a single-column mobile flow.
 - One-command Docker Compose self-hosting path: `docker compose up -d --build` starts PostgreSQL, Redis, backend API, Dramatiq worker, and the Web static site; `just release` now uses the Compose production update and health-check flow.
@@ -43,7 +43,7 @@ Completed baseline capabilities:
 - Expand end-to-end test examples for product workflow DAGs.
 - Add frontend component/interaction regression testing strategy.
 - Add more edge tests for provider mock, OpenAI Responses provider, failure classification, and manual retry/cancel behavior.
-- Add independent tests for settings-page secret updates and non-echo behavior.
+- Add independent tests for settings-page secret updates, non-echo behavior, ordinary-user settings rejection, and admin secondary unlock.
 
 ### 3. Workflow Experience
 
@@ -91,7 +91,7 @@ Completed baseline capabilities:
 
 ## Not Planned for Now
 
-- Built-in hosted accounts or managed model keys.
+- Built-in hosted accounts, managed model keys, or a local account system that replaces sub2api.
 - Built-in payment/billing.
-- Public registration by default.
+- Public registration by default outside sub2api public settings.
 - Fully automated placement without human confirmation.
