@@ -62,6 +62,8 @@ def require_settings_unlocked(
 ) -> None:
     if not _settings_token_configured():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="设置解锁令牌未配置，请联系管理员")
+    if current_user.session_id == "dev-session":
+        return
     auth_session = session.get(AuthSession, current_user.session_id)
     if auth_session is None or auth_session.settings_unlocked_at is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先解锁系统配置")

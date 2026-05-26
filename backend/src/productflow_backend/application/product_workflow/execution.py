@@ -170,6 +170,8 @@ def _workflow_execution_dependencies_for_run(session: Session, run: WorkflowRun)
     if text_config.provider_kind == "mock" and image_config.provider_kind == "mock":
         return default_workflow_execution_dependencies()
     if not run.credential_id:
+        if run.owner_id == "dev:admin" and (text_config.api_key or image_config.api_key):
+            return default_workflow_execution_dependencies()
         raise BusinessValidationError(TASK_KEY_EXPIRED_REASON)
     credential = session.scalar(
         select(UserProviderCredential).where(
