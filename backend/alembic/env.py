@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from productflow_backend.config import get_settings
 from productflow_backend.infrastructure.db.models import Base
+from productflow_backend.infrastructure.db.session import _normalize_database_url
 
 config = context.config
 
@@ -19,7 +20,7 @@ target_metadata = Base.metadata
 def run_migrations_offline() -> None:
     settings = get_settings()
     context.configure(
-        url=settings.database_url,
+        url=_normalize_database_url(settings.database_url),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -31,7 +32,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section) or {}
-    section["sqlalchemy.url"] = get_settings().database_url
+    section["sqlalchemy.url"] = _normalize_database_url(get_settings().database_url)
     connectable = engine_from_config(
         section,
         prefix="sqlalchemy.",
