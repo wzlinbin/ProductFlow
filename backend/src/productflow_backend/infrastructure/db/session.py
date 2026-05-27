@@ -16,7 +16,7 @@ def _normalize_database_url(url: str) -> str:
     scheme (which SQLAlchemy resolves via the psycopg2 default) or the explicit
     ``postgresql+psycopg2://`` dialect.  Both must be rewritten to
     ``postgresql+psycopg://`` so SQLAlchemy uses the installed psycopg v3 package
-    instead of the missing psycopg2 package.
+    (``psycopg[binary]``) instead of the legacy psycopg2 package.
     """
     if url.startswith("postgresql+psycopg2://"):
         return url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
