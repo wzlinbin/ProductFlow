@@ -31,7 +31,7 @@ from productflow_backend.infrastructure.provider_config import (
     update_provider_binding,
     update_provider_profile,
 )
-from productflow_backend.presentation.deps import CurrentUser, as_utc, get_session, require_admin
+from productflow_backend.presentation.deps import CurrentUser, as_utc, get_session, require_admin, require_user
 from productflow_backend.presentation.schemas.settings import (
     ConfigItemResponse,
     ConfigOptionResponse,
@@ -48,7 +48,7 @@ from productflow_backend.presentation.schemas.settings import (
     SettingsUnlockRequest,
 )
 
-router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 def _settings_token_configured() -> bool:
@@ -67,7 +67,9 @@ def require_settings_unlocked(
     auth_session = session.get(AuthSession, current_user.session_id)
     if auth_session is None or auth_session.settings_unlocked_at is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先解锁系统配置")
-    expires_at = as_utc(auth_session.settings_unlocked_at) + timedelta(seconds=get_runtime_settings().settings_unlock_ttl_seconds)
+    expires_at = as_utc(auth_session.settings_unlocked_at) + timedelta(
+        seconds=get_runtime_settings().settings_unlock_ttl_seconds
+    )
     if expires_at <= datetime.now(UTC):
         auth_session.settings_unlocked_at = None
         session.commit()
@@ -319,7 +321,7 @@ def update_provider_binding_endpoint(
 
 
 @router.get("/runtime", response_model=RuntimeConfigResponse)
-def get_runtime_config_endpoint() -> RuntimeConfigResponse:
+def get_runtime_config_endpoint(current_user: CurrentUser = Depends(require_user)) -> RuntimeConfigResponse:
     settings = get_runtime_settings()
     return RuntimeConfigResponse(
         image_generation_max_dimension=settings.image_generation_max_dimension,

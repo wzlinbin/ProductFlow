@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from productflow_backend.config import get_runtime_settings
 from productflow_backend.infrastructure.db.models import AuthSession
@@ -74,7 +75,11 @@ def get_current_user(request: Request, session: Session = Depends(get_session)) 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已过期，请重新登录")
 
     auth_session.last_seen_at = now
-    session.commit()
+    try:
+        session.commit()
+    except StaleDataError as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已过期，请重新登录") from exc
     return CurrentUser(
         session_id=auth_session.id,
         owner_id=auth_session.owner_id,
@@ -102,4 +107,3 @@ def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> Curr
 def require_deletion_enabled() -> None:
     if not get_runtime_settings().deletion_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="删除功能已关闭，请联系管理员")
-

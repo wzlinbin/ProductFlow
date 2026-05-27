@@ -90,6 +90,19 @@ class _PolicyRejectedWorkflowImageProvider:
         raise RuntimeError("Request blocked by content policy")
 
 
+class _ServiceUnavailableTextProvider:
+    provider_name = "service-unavailable-text-test"
+    prompt_version = "service-unavailable-text-test-v1"
+
+    def generate_brief(self, *args, **kwargs):
+        raise RuntimeError(
+            "Error code: 503 - {'error': {'message': 'Service temporarily unavailable', 'type': 'api_error'}}"
+        )
+
+    def generate_copy(self, *args, **kwargs):
+        raise AssertionError("brief 失败后不应继续生成文案")
+
+
 def test_workflow_run_kickoff_reuses_overlapping_active_node_runs(db_session, configured_env: Path) -> None:
     from productflow_backend.application.product_workflows import delete_workflow_node, start_product_workflow_run
 
@@ -948,6 +961,57 @@ def test_workflow_image_generation_policy_reject_is_not_retryable(
         "last_failure_retryable": False,
         "retry_hint": "revise_input",
     }
+
+
+def test_workflow_copy_provider_503_uses_friendly_key_permission_hint(
+    db_session,
+    configured_env: Path,
+) -> None:
+    from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
+    from productflow_backend.application.product_workflows import run_product_workflow
+
+    product = create_product(
+        db_session,
+        name="文案供应商失败商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="workflow-copy-provider-503.png",
+        content_type="image/png",
+    )
+
+    workflow = run_product_workflow(
+        db_session,
+        product_id=product.id,
+        dependencies=WorkflowExecutionDependencies(
+            text_provider_resolver=lambda: _ServiceUnavailableTextProvider(),
+        ),
+    )
+    db_session.expire_all()
+
+    run = (
+        db_session.query(WorkflowRun)
+        .filter_by(workflow_id=workflow.id)
+        .order_by(WorkflowRun.started_at.desc())
+        .first()
+    )
+    assert run is not None
+    assert run.status == WorkflowRunStatus.FAILED
+    assert run.failure_reason == (
+        "当前账号的模型服务暂时不可用，可能是 API Key 权限、额度或供应商网关异常。"
+        "请检查 API Key 权限、分组、余额和模型权限，或稍后重试"
+    )
+    assert "Error code" not in run.failure_reason
+    assert "Service temporarily unavailable" not in run.failure_reason
+    assert run.is_retryable is True
+
+    copy_node = db_session.query(WorkflowNode).filter_by(
+        workflow_id=workflow.id,
+        node_type=WorkflowNodeType.COPY_GENERATION,
+    ).one()
+    assert copy_node.status == WorkflowNodeStatus.FAILED
+    assert copy_node.failure_reason == run.failure_reason
 
 
 def test_workflow_time_limit_exception_marks_running_node_failed(

@@ -187,6 +187,7 @@ cp .env.example .env
 - `POSTGRES_PASSWORD`：PostgreSQL 密码；Compose 会用它拼出容器内的 `DATABASE_URL`。
 - `SUB2API_AUTH_BASE_URL`：sub2api 登录、注册、2FA 和 key 管理服务地址；真实用户登录必须配置。
 - `SUB2API_PROVIDER_BASE_URL`：用户绑定 API key 调用的模型供应商兼容入口；真实用户生成必须配置。
+- `MIGRATION_DEFAULT_OWNER_ID`：升级已有旧数据时必须设置，用于把旧的商品、图像会话、画布模板和图库记录归属到一个 sub2api 用户，格式必须是 `sub2api:<用户ID>`；全新空库可留空。
 
 默认 provider 为 `mock`，`POSTER_GENERATION_MODE=template`，无需真实模型密钥即可完成管理员兼容模式下的创建商品、生成文案和模板海报等基础流程。真实用户登录、注册、账号页和用户绑定生成依赖 sub2api 配置；真实模型配置见“模型与供应商配置”。
 

@@ -97,3 +97,42 @@ docker compose logs --tail=80 productflow-backend productflow-worker productflow
 - 综合评分：95/100。
 
 建议：通过。
+**验证报告：key 权限错误提示友好化**
+
+时间戳：2026-05-27 13:50:00
+
+# 审查清单
+
+需求字段完整性：目标明确，将普通账号 key 权限或供应商 503 原始错误改为友好提示。
+覆盖原始意图：已覆盖工作流文案节点的 `Error code: 503 - Service temporarily unavailable` 泄漏问题。
+交付物映射：代码为 `image_generation_failures.py`、`product_workflow/execution.py`；测试为 `test_product_workflow_queue_recovery.py`。
+依赖与风险：复用既有 provider 异常链分类；主要风险是部分网关用 5xx 表达 key 权限，因此提示同时覆盖权限、额度和网关异常。
+审查结论：通过。
+
+# 技术维度评分
+
+代码质量：92/100。实现复用既有分类链路，未增加前端特殊分支。
+测试覆盖：91/100。新增 503 原文回归测试，并运行 workflow 队列相关测试。
+规范遵循：90/100。touched files Ruff 通过；未运行全仓 Ruff，因为仓库已有历史 Ruff 问题。
+
+# 战略维度评分
+
+需求匹配：95/100。失败原因从原始 provider 503 改为可操作中文提示。
+架构一致：92/100。错误清洗位于 application 层，持久化前完成。
+风险评估：90/100。保留 `TimeLimitExceeded` 与业务校验原路径，异常分类只影响 provider 非业务异常。
+
+# 综合评分
+
+综合评分：92/100
+建议：通过
+
+# 本地验证
+
+`uv run --directory backend ruff check src/productflow_backend/application/image_generation_failures.py src/productflow_backend/application/product_workflow/execution.py tests/test_product_workflow_queue_recovery.py --fix`：通过。
+`uv run --directory backend pytest tests/test_product_workflow_queue_recovery.py::test_workflow_copy_provider_503_uses_friendly_key_permission_hint -q`：1 passed。
+`uv run --directory backend pytest tests/test_product_workflow_queue_recovery.py -q`：20 passed。
+`uv run --directory backend pytest tests/test_auth_settings_runtime_config.py tests/test_queue_recovery.py -q`：27 passed。
+`docker compose up -d --build --remove-orphans`：通过。
+`docker compose ps`：backend、web、postgres、redis healthy，worker running。
+`GET http://127.0.0.1:29281/api/healthz`：`{"status":"ok"}`。
+容器内分类烟测：503 provider 原文输出为“当前账号的模型服务暂时不可用，可能是 API Key 权限、额度或供应商网关异常。请检查 API Key 权限、分组、余额和模型权限，或稍后重试”。

@@ -1393,6 +1393,14 @@ export function SettingsPage() {
     }
   }, [configQuery.error, queryClient]);
 
+  useEffect(() => {
+    if (lockStateQuery.error instanceof ApiError && lockStateQuery.error.status === 403) {
+      setError(t("settings.adminOnly"));
+      void queryClient.invalidateQueries({ queryKey: ["session"] });
+      navigate("/products", { replace: true });
+    }
+  }, [lockStateQuery.error, navigate, queryClient, t]);
+
   const activeMeta = SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
   const activeItems = itemsForSection(configQuery.data, activeSection);
   const normalizedSectionSearch = sectionSearch.trim().toLowerCase();
@@ -1658,7 +1666,9 @@ export function SettingsPage() {
             </div>
           ) : lockStateQuery.isError ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {t("settings.lockLoadFailed")}
+              {lockStateQuery.error instanceof ApiError && lockStateQuery.error.status === 403
+                ? t("settings.adminOnly")
+                : t("settings.lockLoadFailed")}
             </div>
           ) : !lockStateQuery.data?.configured ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">

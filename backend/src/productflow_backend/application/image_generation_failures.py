@@ -140,6 +140,34 @@ _EXPLICIT_REJECT_PATTERNS = (
 )
 
 
+_PERMISSION_FAILURE_PATTERNS = (
+    re.compile(r"\b(401|403)\b"),
+    re.compile(
+        r"forbidden|unauthorized|permission|access denied|not allowed|invalid api key|authentication",
+        re.IGNORECASE,
+    ),
+    re.compile(r"权限|未授权|无权|认证|禁止|密钥"),
+)
+
+_TEXT_FAILURE_REASONS: dict[ImageGenerationFailureCategory, str] = {
+    "rate_limit": "当前账号的模型服务限流或额度不足，请检查 API Key 余额，或稍后降低并发重试",
+    "quota": "当前账号的模型服务限流或额度不足，请检查 API Key 余额，或稍后降低并发重试",
+    "content_policy": "模型供应商拒绝了本次内容，请调整提示词或输入内容后重试",
+    "connection": "模型供应商连接中断，请检查网络或代理后重试",
+    "timeout": "模型供应商请求超时，请稍后重试",
+    "provider_5xx": (
+        "当前账号的模型服务暂时不可用，可能是 API Key 权限、额度或供应商网关异常。"
+        "请检查 API Key 权限、分组、余额和模型权限，或稍后重试"
+    ),
+    "unsupported_parameters": "模型供应商参数不支持，请检查模型名称或高级参数后重试",
+    "bad_request": "模型供应商拒绝了本次请求，请检查模型名称、API Key 权限或请求参数后重试",
+    "unknown": "文案生成失败，请稍后重试",
+}
+_TEXT_PERMISSION_FAILURE_REASON = (
+    "当前账号的 API Key 暂无该模型权限或额度不足，请检查 API Key 权限、分组、余额和模型权限后重试"
+)
+
+
 def _iter_exception_chain(exc: BaseException) -> Iterable[BaseException]:
     current: BaseException | None = exc
     seen: set[int] = set()
@@ -276,3 +304,34 @@ def classify_image_generation_failure(
 
 def safe_image_generation_failure_reason(exc: BaseException, *, generic_message: str) -> str:
     return classify_image_generation_failure(exc, generic_message=generic_message).reason
+
+
+def classify_text_generation_failure(
+    exc: BaseException,
+    *,
+    generic_message: str,
+) -> ImageGenerationFailureDecision:
+    diagnostics = [" ".join(message.strip().split()) for message in _iter_exception_diagnostics(exc) if message.strip()]
+    display_messages = list(_iter_exception_display_messages(exc))
+    if not diagnostics and not display_messages:
+        return _decision(reason=generic_message, retryable=True, retry_hint="retry_later", category="unknown")
+    diagnostics_text = " ".join(diagnostics)
+    if any(pattern.search(diagnostics_text) for pattern in _PERMISSION_FAILURE_PATTERNS):
+        return _decision(
+            reason=_TEXT_PERMISSION_FAILURE_REASON,
+            retryable=False,
+            retry_hint="check_settings",
+            category="bad_request",
+        )
+    categorized_decision = _categorized_failure_decision(diagnostics)
+    if categorized_decision is None:
+        raw_message = display_messages[0] if display_messages else diagnostics[0]
+        if raw_message and _contains_sensitive_material(raw_message):
+            return _decision(reason=generic_message, retryable=True, retry_hint="retry_later", category="unknown")
+        return _decision(reason=generic_message, retryable=True, retry_hint="retry_later", category="unknown")
+    return _decision(
+        reason=_TEXT_FAILURE_REASONS[categorized_decision.category],
+        retryable=categorized_decision.retryable,
+        retry_hint=categorized_decision.retry_hint,
+        category=categorized_decision.category,
+    )

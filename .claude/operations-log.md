@@ -69,3 +69,35 @@ SESSION_SECRET=local-session-secret
 - `productflow-redis`：健康。
 - `productflow-worker`：已启动。
 - 后端 `/healthz` 返回 `{"status":"ok"}`。
+**编码前检查 - key 权限错误提示友好化**
+时间：2026-05-27 13:30:00
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-key-permission-error.md`
+□ 将使用以下可复用组件：
+  - `classify_image_generation_failure` 相关异常链诊断：`backend/src/productflow_backend/application/image_generation_failures.py` - 复用异常链、分类和敏感信息过滤模式
+  - `WorkflowSafeExecutionError`：`backend/src/productflow_backend/application/product_workflow/run_state.py` - 持久化安全用户文案
+  - `WorkflowExecutionDependencies`：`backend/src/productflow_backend/application/product_workflow_dependencies.py` - 测试注入 fake provider
+□ 将遵循命名约定：Python 函数 snake_case，常量大写，测试函数 `test_*`
+□ 将遵循代码风格：Ruff 行宽 120、导入排序、pytest 工作流回归测试结构
+□ 确认不重复造轮子，证明：已检查图片 provider 失败分类、工作流失败持久化、workflow 队列测试，新增文本分类复用既有诊断逻辑
+
+**编码后声明 - key 权限错误提示友好化**
+时间：2026-05-27 13:45:00
+
+# 1. 复用了以下既有组件
+`image_generation_failures.py`：复用异常链诊断和敏感信息过滤。
+`WorkflowSafeExecutionError`：用于让工作流持久化安全中文文案。
+`WorkflowExecutionDependencies`：用于回归测试注入 503 文案 provider。
+
+# 2. 遵循了以下项目约定
+命名约定：新增 `classify_text_generation_failure`、`WORKFLOW_TEXT_GENERATION_FAILURE`、`test_workflow_copy_provider_503_uses_friendly_key_permission_hint`。
+代码风格：已通过 touched files Ruff。
+文件组织：错误分类仍在 application 层，路由和前端无需新增特殊分支。
+
+# 3. 对比了以下相似实现
+`product_workflow/image_generation.py`：同样把 provider 异常转换成 `WorkflowSafeExecutionError`。
+`product_workflow/run_state.py`：沿用安全错误持久化方式。
+`tests/test_product_workflow_queue_recovery.py`：沿用工作流 provider 失败回归测试模式。
+
+# 4. 未重复造轮子的证明
+检查了 `application/image_generation_failures.py`、`application/product_workflow/image_generation.py`、`application/product_workflow/run_state.py`，确认已有图片失败分类但缺少文案 provider 分类；本次只补文本场景映射。

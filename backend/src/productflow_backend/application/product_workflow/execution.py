@@ -17,6 +17,7 @@ from productflow_backend.application.copy_payloads import (
     normalize_copy_node_config,
     normalize_copy_payload,
 )
+from productflow_backend.application.image_generation_failures import classify_text_generation_failure
 from productflow_backend.application.product_workflow import graph as product_workflow_graph
 from productflow_backend.application.product_workflow.artifacts import (
     copy_node_output,
@@ -38,6 +39,7 @@ from productflow_backend.application.product_workflow.image_generation import (
 from productflow_backend.application.product_workflow.mutations import get_or_create_product_workflow
 from productflow_backend.application.product_workflow.query import WorkflowQueryService
 from productflow_backend.application.product_workflow.run_state import (
+    WorkflowSafeExecutionError,
     claim_workflow_node_run,
     mark_workflow_run_cancelled,
     mark_workflow_run_failed,
@@ -78,7 +80,10 @@ from productflow_backend.infrastructure.db.models import (
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
 from productflow_backend.infrastructure.image.factory import get_image_provider
-from productflow_backend.infrastructure.provider_config import resolve_image_provider_config, resolve_text_provider_config
+from productflow_backend.infrastructure.provider_config import (
+    resolve_image_provider_config,
+    resolve_text_provider_config,
+)
 from productflow_backend.infrastructure.queue import enqueue_workflow_run
 from productflow_backend.infrastructure.storage import LocalStorage
 from productflow_backend.infrastructure.text.factory import get_text_provider
@@ -87,6 +92,7 @@ logger = logging.getLogger(__name__)
 
 COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS = 2
 TASK_KEY_EXPIRED_REASON = "TASK_KEY_EXPIRED"
+WORKFLOW_TEXT_GENERATION_FAILURE = "文案生成失败，请稍后重试"
 
 
 @dataclass(frozen=True, slots=True)
@@ -896,4 +902,16 @@ def _call_text_provider_with_payload_retry(
                 COPY_PROVIDER_CONTRACT_MAX_ATTEMPTS,
                 exc.__class__.__name__,
             )
+        except TimeLimitExceeded:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "文案 provider 调用失败: operation=%s node_id=%s attempt=%s exception_class=%s",
+                operation,
+                node_id,
+                attempt,
+                type(exc).__name__,
+            )
+            decision = classify_text_generation_failure(exc, generic_message=WORKFLOW_TEXT_GENERATION_FAILURE)
+            raise WorkflowSafeExecutionError(decision.reason, retryable=decision.retryable) from exc
     raise RuntimeError("unreachable text provider retry state")
