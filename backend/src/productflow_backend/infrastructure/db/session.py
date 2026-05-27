@@ -12,9 +12,12 @@ from productflow_backend.config import get_settings
 @lru_cache(maxsize=1)
 def get_engine():
     settings = get_settings()
-    connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+    database_url = settings.database_url.replace(
+        "postgresql+psycopg2://", "postgresql+psycopg://", 1
+    )
+    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     return create_engine(
-        settings.database_url,
+        database_url,
         future=True,
         connect_args=connect_args,
         pool_pre_ping=True,
